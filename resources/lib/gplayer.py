@@ -3,13 +3,13 @@ from threading import Thread
 
 class GPlayer(xbmc.Player):
 
-	def __init__(self, dbID, dbType, widget, trackProgress, settings):
+	def __init__(self, *args, **kwargs):
 		self.videoDuration = self.stopSaving = self.started = self.close = False
-		self.dbID = dbID
-		self.dbType = dbType
-		self.widget = widget
-		self.settings = settings
-		self.trackProgress = trackProgress
+		self.dbID = kwargs["dbID"]
+		self.dbType = kwargs["dbType"]
+		self.widget = kwargs["widget"]
+		self.settings = kwargs["settings"]
+		self.trackProgress = kwargs["trackProgress"]
 
 		if self.dbType == "movie":
 			self.isMovie = True

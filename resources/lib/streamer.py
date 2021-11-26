@@ -57,7 +57,7 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 
 	def startGPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
-		player = gplayer.GPlayer(dbID, dbType, int(widget), int(trackProgress), self.settings)
+		player = gplayer.GPlayer(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
 
 		while not player.close and not self.close:
 
