@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon id="plugin.video.gdrive" version="0.8.66" name="gDrive" provider-name="ddurdle">
+<addon id="plugin.video.gdrive" version="1.0.0" name="gDrive" provider-name="JDRIVO">
 	<requires>
 		<import addon="xbmc.python" version="2.1.0"/>
 	</requires>

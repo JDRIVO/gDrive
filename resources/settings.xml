@@ -31,7 +31,7 @@
 	<category label="30500">
 
 		<setting id="watcher" label="30501" type="bool" default="true" />
-		<setting id="video_db" label="30502" type="file" default="special://profile/Database/MyVideos116.db" />
+		<setting id="video_db" label="30502" type="file" default="special://profile/Database/MyVideos119.db" />
 
 	</category>
 

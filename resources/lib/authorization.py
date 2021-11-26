@@ -1,4 +1,4 @@
-'''
+"""
 	Copyright (C) 2014-2016 ddurdle
 
 	This program is free software: you can redistribute it and/or modify
@@ -15,13 +15,11 @@
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-'''
+"""
 
-class authorization:
-	# CloudService v0.2.3
 
-	##
-	##
+class Authorization:
+
 	def __init__(self, username):
 		self.auth = {}
 		self.username = username
@@ -53,7 +51,7 @@ class authorization:
 		if name in self.auth:
 			return self.auth[name]
 		else:
-			return ''
+			return ""
 
 	##
 	# Get the count of authorization tokens
@@ -68,7 +66,7 @@ class authorization:
 	def saveTokens(self, instanceName, addon):
 
 		for token in self.auth:
-			addon.setSetting(instanceName + '_' + token, self.auth[token])
+			addon.setSetting(instanceName + "_" + token, self.auth[token])
 
 	##
 	# load the latest authorization tokens
@@ -76,9 +74,9 @@ class authorization:
 	def loadToken(self, instanceName, addon, token):
 
 		try:
-			tokenValue = addon.getSetting(instanceName + '_' + token)
+			tokenValue = addon.getSetting(instanceName + "_" + token)
 
-			if tokenValue != '':
+			if tokenValue != "":
 				self.auth[token] = tokenValue
 				return True
 			else:
@@ -94,7 +92,7 @@ class authorization:
 
 		try:
 
-			if self.auth[token] != '':
+			if self.auth[token] != "":
 				return True
 			else:
 				return False

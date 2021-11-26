@@ -1,14 +1,15 @@
-import threading
 import xbmc
 import server
 import watcher
+from threading import Thread
 
-if __name__ == '__main__':
-	t1 = threading.Thread(None, server.run)
-	t2 = threading.Thread(None, watcher.run)
-	t1.start()
-	t2.start()
-
+if __name__ == "__main__":
+	t = Thread(target=server.run)
+	t.setDaemon(True)
+	t.start()
+	t = Thread(target=watcher.run)
+	t.setDaemon(True)
+	t.start()
 	monitor = xbmc.Monitor()
 
 	while not monitor.abortRequested():

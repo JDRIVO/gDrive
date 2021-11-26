@@ -1,453 +1,473 @@
-'''
-    CloudService XBMC Plugin
-    Copyright (C) 2013-2014 ddurdle
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-'''
-
 import re
-import sys
 import os
-import urllib, urllib2
-import xbmc, xbmcgui, xbmcplugin, xbmcvfs
+import sys
+import time
+import urllib2
+import xbmc
+import xbmcgui
+import xbmcplugin
 import constants
-from resources.lib import settings
 
-def decode(data):
-	return re.sub('&#(\d+)(;|(?=\s))', _callback, data).strip()
-
-def decode_dict(data):
-
-	for k, v in data.items():
-
-		if type(v) is str or type(v) is unicode:
-			data[k] = decode(v)
-
-	return data
-
-#http://stackoverflow.com/questions/1208916/decoding-html-entities-with-python/1208931#1208931
-def _callback(matches):
-	id = matches.group(1)
-
-	try:
-		return unichr(int(id) )
-	except:
-		return id
-
-class contentengine(object):
-	plugin_handle = None
-	PLUGIN_URL = ''
-
-	##
-	# load eclipse debugger
-	#	parameters: none
-	##
-	def debugger(self):
-
-		try:
-			remote_debugger = self.settingsModule.getSetting('remote_debugger')
-			remote_debugger_host = self.settingsModule.getSetting('remote_debugger_host')
-
-			# append pydev remote debugger
-			if remote_debugger == 'true':
-				# Make pydev debugger works for auto reload.
-				# Note pydevd module need to be copied in XBMC\system\python\Lib\pysrc
-				import pysrc.pydevd as pydevd
-				# stdoutToServer and stderrToServer redirect stdout and stderr to eclipse console
-				pydevd.settrace(remote_debugger_host, stdoutToServer=True, stderrToServer=True)
-
-		except ImportError:
-			xbmc.log(self.addon.getLocalizedString(30016), xbmc.LOGERROR)
-			sys.exit(1)
-		except:
-			return
-
-	##
-	# Delete an account, enroll an account or refresh the current listings
-	#	parameters: mode
-	##
-	def accountActions(self, addon, mode, instanceName):
-
-		if mode == 'makedefault':
-			addon.setSetting('default_account', re.sub('[^\d]', '', instanceName) )
-			addon.setSetting('default_account_ui', addon.getSetting(instanceName + '_username') )
-			xbmc.executebuiltin('Container.Refresh')
-
-		elif mode == 'rename':
-			input = xbmcgui.Dialog().input(addon.getLocalizedString(30002) )
-
-			if not input:
-				return
-
-			accountName = addon.getSetting(instanceName + '_username')
-			addon.setSetting(instanceName + '_username', input)
-
-			if addon.getSetting('default_account_ui') == accountName:
-				addon.setSetting('default_account_ui', input)
-
-			fallbackAccounts = addon.getSetting('fallback_accounts_ui').split(', ')
-
-			if accountName in fallbackAccounts:
-				fallbackAccounts.remove(accountName)
-				fallbackAccounts.append(input)
-				addon.setSetting('fallback_accounts_ui', ', '.join(fallbackAccounts) )
-
-			xbmc.executebuiltin('Container.Refresh')
-
-		# delete the configuration for the specified account
-		elif mode == 'delete':
-
-			class Deleter:
-				def __init__(self):
-					self.fallbackAccountNumbers = addon.getSetting('fallback_accounts').split(',')
-					self.fallbackAccountNames = addon.getSetting('fallback_accounts_ui').split(', ')
-
-				def deleteAccount(self, instanceName):
-					accountName = addon.getSetting(instanceName + '_username')
-
-					addon.setSetting(instanceName + '_username', '')
-					addon.setSetting(instanceName + '_code', '')
-					addon.setSetting(instanceName + '_client_id', '')
-					addon.setSetting(instanceName + '_client_secret', '')
-					addon.setSetting(instanceName + '_auth_access_token', '')
-					addon.setSetting(instanceName + '_auth_refresh_token', '')
-
-					if addon.getSetting('default_account_ui') == accountName:
-						addon.setSetting('default_account_ui', '')
-						addon.setSetting('default_account', '')
-
-					if accountName in self.fallbackAccountNames:
-						self.fallbackAccountNumbers.remove(re.sub('[^\d]', '', instanceName) )
-						self.fallbackAccountNames.remove(accountName)
-
-						addon.setSetting('fallback_accounts', ','.join(self.fallbackAccountNumbers) )
-						addon.setSetting('fallback_accounts_ui', ', '.join(self.fallbackAccountNames) )
-
-			delete = Deleter()
-
-			if isinstance(instanceName, list):
-				[delete.deleteAccount(x) for x in instanceName]
-			else:
-				delete.deleteAccount(instanceName)
-
-			xbmc.executebuiltin('Container.Refresh')
+PLUGIN_NAME = constants.PLUGIN_NAME
+PLUGIN_HANDLE = int(sys.argv[1])
+PLUGIN_URL = sys.argv[0]
+CLOUD_SERVICE = constants.cloudservice2
+SETTINGS = constants.addon
 
 
-		elif mode == 'deletefallback' or mode == 'addfallback':
-			fallbackAccountNumbers = addon.getSetting('fallback_accounts')
-			fallbackAccountNames = addon.getSetting('fallback_accounts_ui')
-			accountName = addon.getSetting(instanceName + '_username')
-			accountNumber = re.sub('[^\d]', '', instanceName)
+class AccountActions:
 
-			if fallbackAccountNumbers:
-				fallbackAccountNumbers = fallbackAccountNumbers.split(',')
-				fallbackAccountNames = fallbackAccountNames.split(', ')
+	@staticmethod
+	def getDefaultAccount():
+		return SETTINGS.getSetting("default_account_ui"), SETTINGS.getSetting("default_account")
 
-				if mode == 'deletefallback':
-					fallbackAccountNumbers.remove(accountNumber)
-					fallbackAccountNames.remove(accountName)
-				else:
-					fallbackAccountNumbers.append(accountNumber)
-					fallbackAccountNames.append(accountName)
+	@staticmethod
+	def setDefaultAccount(accountName, accountNumber):
+		SETTINGS.setSetting("default_account_ui", accountName)
+		SETTINGS.setSetting("default_account", accountNumber)
 
-				addon.setSetting('fallback_accounts', ','.join(fallbackAccountNumbers) )
-				addon.setSetting('fallback_accounts_ui', ', '.join(fallbackAccountNames) )
-			else:
-				addon.setSetting('fallback', 'true')
-				addon.setSetting('fallback_accounts', accountNumber)
-				addon.setSetting('fallback_accounts_ui', accountName)
+	@staticmethod
+	def getAccounts(accountAmount):
+		accountInstances, accountNames, accountNumbers = [], [], []
 
-			xbmc.executebuiltin('Container.Refresh')
+		for count in range(1, accountAmount + 1):
+			instanceName = PLUGIN_NAME + str(count)
+			username = SETTINGS.getSetting(instanceName + "_username")
 
-		elif mode == 'validate':
-			validation = self.cloudservice2(self.plugin_handle, self.PLUGIN_URL, addon, instanceName, self.user_agent, self.settingsModule)
-			validation.refreshToken()
+			if username:
+				accountInstances.append(instanceName)
+				accountNames.append(username)
+				accountNumbers.append(str(count))
 
-			if validation.failed:
-				accountName = addon.getSetting(instanceName + '_username')
-				selection = xbmcgui.Dialog().yesno(addon.getLocalizedString(30000), '%s %s' % (accountName, addon.getLocalizedString(30019) ) )
+		return accountInstances, accountNames, accountNumbers
 
-				if selection:
-					self.accountActions(addon, 'delete', instanceName)
+	def renameAccount(self, instanceName, accountName, newAccountName):
+		self.setAccountName(instanceName, newAccountName)
+		defaultAccountName, defaultAccountNumber = self.getDefaultAccount()
 
-			else:
-				xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30020) )
+		if defaultAccountName == accountName:
+			self.setDefaultAccount(newAccountName, defaultAccountNumber)
 
-		# enroll a new account
-		elif mode == 'enroll':
+		fallbackAccountNames, fallbackAccountNumbers = self.getFallbackAccounts()
 
-			import socket
-			s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-			s.connect( ('8.8.8.8', 80) )
-			IP = s.getsockname()[0]
-			s.close()
+		if accountName in fallbackAccountNames:
+			fallbackAccountNames.remove(accountName)
+			fallbackAccountNames.append(newAccountName)
+			self.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
 
-			display = xbmcgui.Dialog().ok(addon.getLocalizedString(30000), '%s [B][COLOR blue]http://%s:%s/enroll[/COLOR][/B] %s' % (addon.getLocalizedString(30210), IP, self.addon.getSetting('server_port'), addon.getLocalizedString(30218) ) )
+	def deleteAccount(self, instanceName, accountName):
+		SETTINGS.setSetting(instanceName + "_username", "")
+		SETTINGS.setSetting(instanceName + "_code", "")
+		SETTINGS.setSetting(instanceName + "_client_id", "")
+		SETTINGS.setSetting(instanceName + "_client_secret", "")
+		SETTINGS.setSetting(instanceName + "_auth_access_token", "")
+		SETTINGS.setSetting(instanceName + "_auth_refresh_token", "")
 
-			if display:
-				xbmc.executebuiltin('Container.Refresh')
+		defaultAccountName, defaultAccountNumber = self.getDefaultAccount()
 
-	##
-	# add a menu to a directory screen
-	#	parameters: url to resolve, title to display, optional: icon, fanart, total_items, instance name
-	##
-	def addMenu(self, url, title, total_items=0, instanceName=None):
+		if defaultAccountName == accountName:
+			SETTINGS.setSetting("default_account_ui", "")
+			SETTINGS.setSetting("default_account", "")
+
+	@staticmethod
+	def getAccountName(instanceName):
+		return SETTINGS.getSetting(instanceName + "_username")
+
+	@staticmethod
+	def getAccountNumber(instanceName):
+		return re.sub("[^\d]", "", instanceName)
+
+	@staticmethod
+	def setAccountName(instanceName, newAccountName):
+		SETTINGS.setSetting(instanceName + "_username", newAccountName)
+
+	@staticmethod
+	def validateAccount(instanceName, userAgent):
+		validation = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
+		validation.refreshToken()
+
+		if not validation.failed:
+			return True
+
+	@staticmethod
+	def getFallbackAccounts():
+		fallbackAccountNames = SETTINGS.getSetting("fallback_accounts_ui")
+		fallbackAccountNumbers = SETTINGS.getSetting("fallback_accounts")
+
+		if fallbackAccountNames:
+			return fallbackAccountNames.split(", "), fallbackAccountNumbers.split(",")
+		else:
+			return [], []
+
+	@staticmethod
+	def setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers):
+		SETTINGS.setSetting("fallback_accounts_ui", ", ".join(fallbackAccountNames))
+		SETTINGS.setSetting("fallback_accounts", ",".join(fallbackAccountNumbers))
+
+		if fallbackAccountNames:
+			SETTINGS.setSetting("fallback", "true")
+		else:
+			SETTINGS.setSetting("fallback", "false")
+
+	def addFallbackAccount(self, accountName, accountNumber, fallbackAccounts):
+		fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
+		fallbackAccountNumbers.append(accountNumber)
+		fallbackAccountNames.append(accountName)
+		self.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
+
+	def removeFallbackAccount(self, accountName, accountNumber, fallbackAccounts):
+		fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
+		fallbackAccountNumbers.remove(accountNumber)
+		fallbackAccountNames.remove(accountName)
+		self.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
+
+
+class ContentEngine:
+
+	def addMenu(self, url, title, totalItems=0, instanceName=None):
 		listitem = xbmcgui.ListItem(title)
 
 		if instanceName is not None:
-			cm = []
-			cm.append( (self.addon.getLocalizedString(30211), 'Addon.OpenSettings(%s)' % self.addon.getAddonInfo('id') ) )
+			cm = [(SETTINGS.getLocalizedString(30211), "Addon.OpenSettings({})".format(SETTINGS.getAddonInfo("id")))]
 			listitem.addContextMenuItems(cm, True)
 
-		xbmcplugin.addDirectoryItem(self.plugin_handle, url, listitem, totalItems=total_items)
+		xbmcplugin.addDirectoryItem(PLUGIN_HANDLE, url, listitem, totalItems=totalItems)
 
-	# Retrieves all active accounts
-	def getAccounts(self):
-		self.accountNumbers = []
-		self.accountNames = []
-		self.accountInstances = []
-
-		for count in range (1, self.accountAmount + 1):
-			instanceName = self.PLUGIN_NAME + str(count)
-			username = self.addon.getSetting(instanceName + '_username')
-
-			if username:
-				self.accountNumbers.append(str(count) )
-				self.accountNames.append(username)
-				self.accountInstances.append(instanceName)
-
-	def run(self, dbID=None, dbType=None, filePath=None, writer=None, query=None, addon=None, host=None):
-		addon = constants.addon
-		self.addon = addon
-
-		self.PLUGIN_URL = constants.PLUGIN_NAME
-		self.PLUGIN_NAME = constants.PLUGIN_NAME
-		self.cloudservice2 = constants.cloudservice2
-
-		#global variables
-		self.PLUGIN_URL = sys.argv[0]
-		self.plugin_handle = int(sys.argv[1])
-		plugin_queries = settings.parse_query(sys.argv[2][1:])
-
-		# cloudservice - create settings module
-		self.settingsModule = settings.settings(addon)
-
-		self.user_agent = self.settingsModule.getSetting('user_agent')
-		self.accountAmount = addon.getSettingInt('account_amount')
-		mode = self.settingsModule.getParameter('mode', 'main')
-		mode = mode.lower()
+	def run(self, dbID, dbType, filePath):
+		mode = SETTINGS.getParameter("mode", "main").lower()
+		userAgent = SETTINGS.getSetting("user_agent")
+		accountAmount = SETTINGS.getSettingInt("account_amount")
+		pluginQueries = SETTINGS.parseQuery(sys.argv[2][1:])
+		accountActions = AccountActions()
 
 		try:
-			instanceName = (plugin_queries['instance']).lower()
+			instanceName = (pluginQueries["instance"]).lower()
 		except:
 			instanceName = None
 
-		if not instanceName and mode == 'main':
-			self.addMenu(self.PLUGIN_URL + '?mode=enroll', '[B]1. %s[/B]' % addon.getLocalizedString(30207), instanceName=True)
-			self.addMenu(self.PLUGIN_URL + '?mode=fallback', '[B]2. %s[/B]' % addon.getLocalizedString(30220), instanceName=True)
-			self.addMenu(self.PLUGIN_URL + '?mode=validate', '[B]3. %s[/B]' % addon.getLocalizedString(30021), instanceName=True)
-			self.addMenu(self.PLUGIN_URL + '?mode=delete', '[B]4. %s[/B]' % addon.getLocalizedString(30022), instanceName=True)
+		if not instanceName and mode == "main":
+			self.addMenu(PLUGIN_URL + "?mode=enroll", "[B]1. {}[/B]".format(SETTINGS.getLocalizedString(30207)), instanceName=True)
+			self.addMenu(PLUGIN_URL + "?mode=fallback", "[B]2. {}[/B]".format(SETTINGS.getLocalizedString(30220)), instanceName=True)
+			self.addMenu(PLUGIN_URL + "?mode=validate", "[B]3. {}[/B]".format(SETTINGS.getLocalizedString(30021)), instanceName=True)
+			self.addMenu(PLUGIN_URL + "?mode=delete", "[B]4. {}[/B]".format(SETTINGS.getLocalizedString(30022)), instanceName=True)
 
-			defaultAccount = addon.getSetting('default_account')
-			fallBackAccounts = addon.getSetting('fallback_accounts').split(',')
+			defaultAccountName, defaultAccountNumber = accountActions.getDefaultAccount()
+			fallbackAccounts = accountActions.getFallbackAccounts()
+			fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
 
-			for count in range (1, self.accountAmount + 1):
-				instanceName = self.PLUGIN_NAME + str(count)
-				username = self.addon.getSetting(instanceName + '_username')
+			for count in range (1, accountAmount + 1):
+				instanceName = PLUGIN_NAME + str(count)
+				accountName = accountActions.getAccountName(instanceName)
 
-				if username:
-					countStr = str(count)
+				if accountName:
+					count = str(count)
 
-					if countStr == defaultAccount:
-						username = '[COLOR crimson][B]%s[/B][/COLOR]' % username
-					elif countStr in fallBackAccounts:
-						username = '[COLOR deepskyblue][B]%s[/B][/COLOR]' % username
+					if count == defaultAccountNumber:
+						accountName = "[COLOR crimson][B]{}[/B][/COLOR]".format(accountName)
+					elif count in fallbackAccountNumbers:
+						accountName = "[COLOR deepskyblue][B]{}[/B][/COLOR]".format(accountName)
 
-					self.addMenu('%s?mode=main&instance=%s' % (self.PLUGIN_URL, instanceName), username, instanceName=instanceName)
+					self.addMenu("{}?mode=main&instance={}".format(
+						PLUGIN_URL, instanceName),
+						accountName,
+						instanceName=instanceName,
+					)
 
-			xbmcplugin.setContent(self.plugin_handle, 'files')
-			xbmcplugin.addSortMethod(self.plugin_handle, xbmcplugin.SORT_METHOD_LABEL)
+			xbmcplugin.setContent(PLUGIN_HANDLE, "files")
+			xbmcplugin.addSortMethod(PLUGIN_HANDLE, xbmcplugin.SORT_METHOD_LABEL)
 
-		elif instanceName and mode == 'main':
-			fallbackAccounts = addon.getSetting('fallback_accounts').split(',')
-			options = [self.addon.getLocalizedString(30219), self.addon.getLocalizedString(30002), addon.getLocalizedString(30023), self.addon.getLocalizedString(30159) ]
-			account = re.sub('[^\d]', '', instanceName)
-			fallbackExists = False
+		elif instanceName and mode == "main":
+			options = [
+				SETTINGS.getLocalizedString(30219),
+				SETTINGS.getLocalizedString(30002),
+				SETTINGS.getLocalizedString(30023),
+				SETTINGS.getLocalizedString(30159),
+			]
+			fallbackAccounts = accountActions.getFallbackAccounts()
+			fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
+			accountName = accountActions.getAccountName(instanceName)
+			accountNumber = accountActions.getAccountNumber(instanceName)
 
-			if account in fallbackAccounts:
+			if accountNumber in fallbackAccountNumbers:
 				fallbackExists = True
-				options.insert(0, self.addon.getLocalizedString(30212) )
+				options.insert(0, SETTINGS.getLocalizedString(30212))
 			else:
-				options.insert(0, self.addon.getLocalizedString(30213) )
+				fallbackExists = False
+				options.insert(0, SETTINGS.getLocalizedString(30213))
 
 			selection = xbmcgui.Dialog().contextmenu(options)
 
 			if selection == 0:
 
 				if fallbackExists:
-					mode = 'deletefallback'
+					accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
 				else:
-					mode = 'addfallback'
+					accountActions.addFallbackAccount(accountName, accountNumber, fallbackAccounts)
 
 			elif selection == 1:
-				mode = 'makedefault'
+				accountActions.setDefaultAccount(
+					accountActions.getAccountName(instanceName),
+					accountActions.getAccountNumber(instanceName),
+				)
+
 			elif selection == 2:
-				mode = 'rename'
+				newName = xbmcgui.Dialog().input(SETTINGS.getLocalizedString(30002) + ": " + accountName)
+
+				if not newName:
+					return
+
+				accountActions.renameAccount(instanceName, accountName, newName)
+
 			elif selection == 3:
-				mode = 'validate'
+				validated = accountActions.validateAccount(instanceName, userAgent)
+
+				if not validated:
+					selection = xbmcgui.Dialog().yesno(
+						SETTINGS.getLocalizedString(30000),
+						"{} {}".format(accountName, SETTINGS.getLocalizedString(30019)),
+					)
+
+					if not selection:
+						return
+
+					accountActions.deleteAccount(instanceName, accountName)
+
+					if accountName in fallbackAccountNames:
+						accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
+
+				else:
+					xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30020))
+					return
+
 			elif selection == 4:
-				mode = 'delete'
-				selection = xbmcgui.Dialog().yesno(self.addon.getLocalizedString(30000), '%s %s?' % (self.addon.getLocalizedString(30121), addon.getSetting(instanceName + '_username') ) )
+				selection = xbmcgui.Dialog().yesno(
+					SETTINGS.getLocalizedString(30000),
+					"{} {}?".format(
+						SETTINGS.getLocalizedString(30121),
+						accountActions.getAccountName(instanceName),
+					)
+				)
 
 				if not selection:
 					return
 
+				accountActions.deleteAccount(instanceName, accountName)
+
+				if accountName in fallbackAccountNames:
+					accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
+
 			else:
 				return
 
-			self.accountActions(addon, mode, instanceName)
+			xbmc.executebuiltin("Container.Refresh")
 
-		elif mode == 'enroll' or mode == 'makedefault':
-			self.accountActions(addon, mode, instanceName)
+		elif mode == "enroll":
+			import socket
 
-		elif mode == 'settings_default':
-			self.getAccounts()
-			selection = xbmcgui.Dialog().select(addon.getLocalizedString(30120), self.accountNames)
+			s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			s.connect(("8.8.8.8", 80))
+			address = s.getsockname()[0]
+			s.close()
+
+			selection = xbmcgui.Dialog().ok(
+				SETTINGS.getLocalizedString(30000),
+				"{} [B][COLOR blue]http://{}:{}/enroll[/COLOR][/B] {}".format(
+					SETTINGS.getLocalizedString(30210),
+					address,
+					SETTINGS.getSetting("server_port"),
+					SETTINGS.getLocalizedString(30218),
+				)
+			)
+
+			if selection:
+				xbmc.executebuiltin("Container.Refresh")
+
+		elif mode == "make_default":
+			accountActions.setDefaultAccount(
+				accountActions.getAccountName(instanceName),
+				accountActions.getAccountNumber(instanceName),
+			)
+			xbmc.executebuiltin("Container.Refresh")
+
+		elif mode == "settings_default":
+			accountInstances, accountNames, accountNumbers = accountActions.getAccounts(accountAmount)
+			selection = xbmcgui.Dialog().select(SETTINGS.getLocalizedString(30120), accountNames)
 
 			if selection == -1:
 				return
 
-			addon.setSetting('default_account', self.accountNumbers[selection] )
-			addon.setSetting('default_account_ui', self.accountNames[selection] )
+			accountActions.setDefaultAccount(accountNames[selection], accountNumbers[selection])
+			xbmc.executebuiltin("Container.Refresh")
 
-		elif mode == 'fallback':
-			self.getAccounts()
-			fallbackAccounts = addon.getSetting('fallback_accounts')
-			fallbackAccountNames = addon.getSetting('fallback_accounts_ui')
+		elif mode == "fallback":
+			accountInstances, accountNames, accountNumbers = accountActions.getAccounts(accountAmount)
+			fallbackAccountNames, fallbackAccountNumbers = accountActions.getFallbackAccounts()
 
-			if fallbackAccounts:
-				fallbackAccounts = [self.accountNumbers.index(x) for x in fallbackAccounts.split(',') if x in self.accountNumbers]
-				selection = xbmcgui.Dialog().multiselect(addon.getLocalizedString(30120), self.accountNames, preselect=fallbackAccounts)
+			if fallbackAccountNumbers:
+				fallbackAccountNumbers = [accountNumbers.index(n) for n in fallbackAccountNumbers if n in accountNumbers]
+				selection = xbmcgui.Dialog().multiselect(
+					SETTINGS.getLocalizedString(30120),
+					accountNames,
+					preselect=fallbackAccountNumbers,
+				)
 			else:
-				selection = xbmcgui.Dialog().multiselect(addon.getLocalizedString(30120), self.accountNames)
+				selection = xbmcgui.Dialog().multiselect(SETTINGS.getLocalizedString(30120), accountNames)
 
 			if selection is None:
 				return
 
-			addon.setSetting('fallback_accounts', ','.join(self.accountNumbers[x] for x in selection) )
-			addon.setSetting('fallback_accounts_ui', ', '.join(self.accountNames[x] for x in selection) )
-			addon.setSetting('fallback', 'true')
+			accountActions.setFallbackAccounts([accountNames[i] for i in selection], [accountNumbers[i] for i in selection])
+			xbmc.executebuiltin("Container.Refresh")
 
-			xbmc.executebuiltin('Container.Refresh')
+		elif mode == "validate":
+			accountInstances, accountNames, accountNumbers = accountActions.getAccounts(accountAmount)
+			fallbackAccounts = accountActions.getFallbackAccounts()
+			fallbackAccountNames, fallbackAccountNumbers = accountActions.getFallbackAccounts()
+			accounts = [n for n in range(accountAmount)]
+			selection = xbmcgui.Dialog().multiselect(SETTINGS.getLocalizedString(30024), accountNames, preselect=accounts)
 
-		elif mode == 'validate':
-			self.getAccounts()
-			selection = xbmcgui.Dialog().multiselect(addon.getLocalizedString(30024), self.accountNames)
-
-			if selection is None:
+			if not selection:
 				return
 
 			for index_ in selection:
-				instanceName = self.accountInstances[index_]
-				validation = self.cloudservice2(self.plugin_handle, self.PLUGIN_URL, addon, instanceName, self.user_agent, self.settingsModule)
-				validation.refreshToken()
+				instanceName = accountInstances[index_]
+				accountName = accountNames[index_]
+				accountNumber = accountNumbers[index_]
+				validated = accountActions.validateAccount(instanceName, userAgent)
 
-				if validation.failed:
-					accountName = self.accountNames[index_]
-					selection = xbmcgui.Dialog().yesno(addon.getLocalizedString(30000), '%s %s' % (accountName, addon.getLocalizedString(30019) ) )
+				if not validated:
+					selection = xbmcgui.Dialog().yesno(
+						SETTINGS.getLocalizedString(30000),
+						"{} {}".format(accountName, SETTINGS.getLocalizedString(30019)),
+					)
 
-					if selection:
-						self.accountActions(addon, 'delete', instanceName)
+					if not selection:
+						continue
 
-			xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30020) )
+					accountActions.deleteAccount(instanceName, accountName)
 
-		elif mode == 'settings_delete' or mode == 'delete':
-			self.getAccounts()
-			selection = xbmcgui.Dialog().multiselect(addon.getLocalizedString(30158), self.accountNames)
+					if accountName in fallbackAccountNames:
+						accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
 
-			if selection is None:
+			xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30020))
+			xbmc.executebuiltin("Container.Refresh")
+
+		elif mode in ("delete", "settings_delete"):
+			accountInstances, accountNames, accountNumbers = accountActions.getAccounts(accountAmount)
+			fallbackAccounts = accountActions.getFallbackAccounts()
+			fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
+			selection = xbmcgui.Dialog().multiselect(SETTINGS.getLocalizedString(30158), accountNames)
+
+			if not selection:
 				return
 
-			self.accountActions(addon, 'delete', [self.accountInstances[x] for x in selection] )
+			for accountIndex in selection:
+				accountInstance = accountInstances[accountIndex]
+				accountName = accountNames[accountIndex]
+				accountNumber = accountNumbers[accountIndex]
+				accountActions.deleteAccount(accountInstance, accountName)
 
-			if mode == 'settings_delete' and selection:
-				xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30160) )
+				if accountName in fallbackAccountNames:
+					accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
 
-		elif mode == 'video':
+			if mode == "settings_delete":
+				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30160))
+			else:
+				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30161))
+				xbmc.executebuiltin("Container.Refresh")
 
-			if not dbType and not dbID and not filePath:
-				return
-
-			instanceName = constants.PLUGIN_NAME + str(self.settingsModule.getSetting('default_account', 1) )
-			service = self.cloudservice2(self.plugin_handle, self.PLUGIN_URL, addon, instanceName, self.user_agent, self.settingsModule)
+		elif mode == "video":
+			instanceName = PLUGIN_NAME + str(SETTINGS.getSetting("default_account", 1))
+			service = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
 
 			if service.failed:
-				xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30005) )
+				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30005))
 				return
 
-			if not self.settingsModule.cryptoPassword or not self.settingsModule.cryptoSalt:
-				xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30208) )
+			if not SETTINGS.getSetting("crypto_password") or not SETTINGS.getSetting("crypto_salt"):
+				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30208))
 				return
 
 			try:
 				service
 			except NameError:
-				xbmcgui.Dialog().ok(addon.getLocalizedString(30000), addon.getLocalizedString(30051) + ' ' + addon.getLocalizedString(30052) )
-				xbmc.log(addon.getLocalizedString(30051) + constants.PLUGIN_NAME + '-login', xbmc.LOGERROR)
-				xbmcplugin.endOfDirectory(self.plugin_handle)
+				xbmcgui.Dialog().ok(
+					SETTINGS.getLocalizedString(30000),
+					SETTINGS.getLocalizedString(30051) + " " + SETTINGS.getLocalizedString(30052),
+				)
+				xbmc.log(SETTINGS.getLocalizedString(30051) + PLUGIN_NAME + "-login", xbmc.LOGERROR)
 				return
+
+			if (not dbID or not dbType) and not filePath:
+				timeEnd = time.time() + 1
+
+				while time.time() < timeEnd and (not dbID or not dbType):
+					xbmc.executebuiltin("Dialog.Close(busydialog)")
+					dbID = xbmc.getInfoLabel("ListItem.DBID")
+					dbType = xbmc.getInfoLabel("ListItem.DBTYPE")
 
 			if dbID:
 
-				if dbType == 'movie':
-					jsonQuery = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetMovieDetails", "params": { "movieid":' + str(dbID) + ', "properties": ["resume"] } }')
-					jsonKey = 'moviedetails'
+				if dbType == "movie":
+					jsonQuery = xbmc.executeJSONRPC(
+						'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetMovieDetails", "params": {"movieid": %s, "properties": ["resume"]}}'
+						% dbID
+					)
+					jsonKey = "moviedetails"
 				else:
-					jsonQuery = xbmc.executeJSONRPC('{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetEpisodeDetails", "params": { "episodeid":' + str(dbID) + ', "properties": ["resume"] } }')
-					jsonKey = 'episodedetails'
+					jsonQuery = xbmc.executeJSONRPC(
+						'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetEpisodeDetails", "params": {"episodeid": %s, "properties": ["resume"]}}'
+						% dbID
+					)
+					jsonKey = "episodedetails"
 
 				import json
-				jsonQuery = jsonQuery.encode('utf-8', errors='ignore')
-				jsonResponse = json.loads(jsonQuery)
-				resumeData = jsonResponse['result'][jsonKey]['resume']
 
-				resumePosition = resumeData['position']
-				videoLength = resumeData['total']
+				jsonResponse = json.loads(jsonQuery.encode("utf-8"))
 
-			else:
+				try:
+					resumeData = jsonResponse["result"][jsonKey]["resume"]
+				except:
+					return
 
+				resumePosition = resumeData["position"]
+				videoLength = resumeData["total"]
+
+			elif filePath:
 				from sqlite3 import dbapi2 as sqlite
-				dbPath = xbmc.translatePath(self.settingsModule.getSetting('video_db') )
-				db = sqlite.connect(dbPath)
 
-				dirPath = os.path.dirname(filePath).decode('utf-8') + os.sep
-				fileName = os.path.basename(filePath).decode('utf-8')
-				resumePosition = list(db.execute('SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)', (dirPath, fileName) ) )
+				dbPath = xbmc.translatePath(SETTINGS.getSetting("video_db"))
+				db = sqlite.connect(dbPath)
+				dirPath = os.path.dirname(filePath) + os.sep
+				fileName = os.path.basename(filePath)
+				resumePosition = list(
+					db.execute(
+						"SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
+						(dirPath, fileName)
+					)
+				)
 
 				if resumePosition:
 					resumePosition = resumePosition[0][0]
-					videoLength = list(db.execute('SELECT totalTimeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)', (dirPath, fileName) ) )[0][0]
+					videoLength = list(
+						db.execute(
+							"SELECT totalTimeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
+							(dirPath, fileName)
+						)
+					)[0][0]
 				else:
 					resumePosition = 0
 
+			else:
+				resumePosition = 0
+
 				# import pickle
 
-				# resumeDBPath = xbmcvfs.translatePath(self.settingsModule.resumeDBPath)
-				# resumeDB = os.path.join(resumeDBPath, 'kodi_resumeDB.p')
+				# resumeDBPath = xbmc.translatePath(SETTINGS.resumeDBPath)
+				# resumeDB = os.path.join(resumeDBPath, "kodi_resumeDB.p")
 
 				# try:
-					# with open(resumeDB, 'rb') as dic:
+					# with open(resumeDB, "rb") as dic:
 						# videoData = pickle.load(dic)
 				# except:
 					# videoData = {}
@@ -458,8 +478,8 @@ class contentengine(object):
 					# videoData[filename] = 0
 					# resumePosition = 0
 
-				# strmName = self.settingsModule.getParameter('title') + ".strm"
-				# cursor = list(db.execute('SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE strFilename="%s")' % strmName) )
+				# strmName = SETTINGS.getParameter("title") + ".strm"
+				# cursor = list(db.execute("SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE strFilename='%s')" % strmName))
 
 				# if cursor:
 					# resumePosition = cursor[0][0]
@@ -469,81 +489,72 @@ class contentengine(object):
 			resumeOption = False
 
 			if resumePosition > 0:
-
-				import time
-				options = []
-				options.append('Resume from ' + str(time.strftime('%H:%M:%S', time.gmtime(resumePosition) ) ) )
-				options.append('Play from beginning')
-
+				options = ("Resume from " + str(time.strftime("%H:%M:%S", time.gmtime(resumePosition))), "Play from beginning")
 				selection = xbmcgui.Dialog().contextmenu(options)
 
 				if selection == 0:
 					# resumePosition = resumePosition / total * 100
 					resumeOption = True
 				# elif selection == 1:
-					# resumePosition = '0'
+					# resumePosition = "0"
 					# videoData[filename] = 0
 				elif selection == -1:
 					return
 
-			driveID = self.settingsModule.getParameter('filename') # file ID
-			driveURL = 'https://www.googleapis.com/drive/v2/files/%s?includeTeamDriveItems=true&supportsTeamDrives=true&alt=media' % driveID
-			url = 'http://localhost:' + str(service.settings.serverPort) + '/crypto_playurl'
-			req = urllib2.Request(url, 'instance=' + str(service.instanceName) + '&url=' + driveURL)
+			# file ID
+			driveID = SETTINGS.getParameter("filename")
+			driveURL = "https://www.googleapis.com/drive/v2/files/{}?includeTeamDriveItems=true&supportsTeamDrives=true&alt=media".format(driveID)
+			serverPort = SETTINGS.getSettingInt("server_port", 8011)
+			url = "http://localhost:{}/crypto_playurl".format(serverPort)
+			data = "instance={}&url={}".format(service.instanceName, driveURL)
+			req = urllib2.Request(url, data.encode("utf-8"))
 
 			try:
 				response = urllib2.urlopen(req)
 				response.close()
-			except urllib2.URLError, e:
-				xbmc.log(self.addon.getAddonInfo('name') + ': ' + str(e), xbmc.LOGERROR)
+			except urllib2.URLError as e:
+				xbmc.log(SETTINGS.getAddonInfo("name") + ": " + str(e), xbmc.LOGERROR)
 				return
 
-			item = xbmcgui.ListItem(path='http://localhost:' + str(service.settings.serverPort) + '/play')
-			# item.setProperty('StartPercent', str(position) )
-			# item.setProperty('startoffset', '60')
+			item = xbmcgui.ListItem(path="http://localhost:{}/play".format(serverPort))
+			# item.setProperty("StartPercent", str(position))
+			# item.setProperty("startoffset", "60")
 
 			if resumeOption:
-				# item.setProperty('totaltime', '1')
-				item.setProperty('totaltime', str(videoLength) )
-				item.setProperty('resumetime', str(resumePosition) )
+				# item.setProperty("totaltime", "1")
+				item.setProperty("totaltime", str(videoLength))
+				item.setProperty("resumetime", str(resumePosition))
 
-			xbmcplugin.setResolvedUrl(self.plugin_handle, True, item)
+			xbmcplugin.setResolvedUrl(PLUGIN_HANDLE, True, item)
 
 			if dbID:
+				widget = 0 if xbmc.getInfoLabel("Container.Content") else 1
+				data = "dbid={}&dbtype={}&widget={}&track={}".format(dbID, dbType, widget, 1)
+			else:
+				data = "dbid={}&dbtype={}&widget={}&track={}".format(0, 0, 0, 0)
 
-				from resources.lib import gplayer
-				player = gplayer.gPlayer(dbID=dbID, dbType=dbType)
+			url = "http://localhost:{}/start_gplayer".format(serverPort)
+			req = urllib2.Request(url, data.encode("utf-8"))
+			response = urllib2.urlopen(req)
+			response.close()
 
-				# with open(resumeDB, 'w+') as dic:
-				#	pickle.dump(videoData, dic)
+		xbmcplugin.endOfDirectory(PLUGIN_HANDLE)
+
+				# with open(resumeDB, "wb+") as dic:
+					# pickle.dump(videoData, dic)
 
 				# del videoData
 
-				xbmc.sleep(100)
-				monitor = xbmc.Monitor()
-
-				while not monitor.abortRequested() and not player.isExit:
-					player.sleep()
-					player.saveTime()
-
-				# with open(resumeDB, 'r') as dic:
-				#	videoData = pickle.load(dic)
+				# with open(resumeDB, "rb") as dic:
+					# videoData = pickle.load(dic)
 
 				# if player.videoWatched:
-				#	del videoData[filename]
+					# del videoData[filename]
 				# else:
-				#	videoData[filename] = player.time
+					# videoData[filename] = player.time
 
-				# with open(resumeDB, 'w+') as dic:
-				#	pickle.dump(videoData, dic)
+				# with open(resumeDB, "wb+") as dic:
+					# pickle.dump(videoData, dic)
 
-		# if dbType == 'movie':
-			# xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "VideoLibrary.RefreshMovie", "params": {"movieid":' + str(dbID) + ', "ignorenfo": true}, "id": "1"}')
-		# elif dbType == 'episode':
-			# xbmc.executeJSONRPC('{"jsonrpc": "2.0", "method": "VideoLibrary.RefreshEpisode", "params": {"episodeid":' + str(dbID) + ', "ignorenfo": true}, "id": "1"}')
-
-		# request = {"jsonrpc": "2.0", "method": "VideoLibrary.GetMovies", "params": { "filter": {"field": "playcount", "operator": "greaterthan", "value": "0"}, "limits": { "start" : 0 }, "properties": ["playcount"], "sort": { "order": "ascending", "method": "label" } }, "id": "libMovies"}
-		# request = {"jsonrpc": "2.0", "method": "VideoLibrary.GetMovies", "params": { "filter": {"field": "playcount", "operator": "greaterthan", "value": "0"}, "limits": { "start" : 0 }, "properties": ["playcount"], "sort": { "order": "ascending", "method": "label" } }, "id": "libMovies"}
-
-		xbmcplugin.endOfDirectory(self.plugin_handle)
-		return
+		# request = {"jsonrpc": "2.0", "method": "VideoLibrary.GetMovies", "params": { "filter": {"field": "playcount", "operator": "greaterthan", "value": "0"}, "limits": { "start": 0 }, "properties": ["playcount"], "sort": { "order": "ascending", "method": "label" } }, "id": "libMovies"}
+		# request = {"jsonrpc": "2.0", "method": "VideoLibrary.GetMovies", "params": { "filter": {"field": "playcount", "operator": "greaterthan", "value": "0"}, "limits": { "start": 0 }, "properties": ["playcount"], "sort": { "order": "ascending", "method": "label" } }, "id": "libMovies"}
