@@ -88,7 +88,7 @@ class Settings(Addon):
 			else:
 				return value
 
-		except Exception as e:
+		except:
 			return default
 
 	def getSettingInt(self, key, default=0):
