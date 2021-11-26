@@ -1,7 +1,6 @@
 import os
 import json
 import xbmc
-import xbmcvfs
 import constants
 from sqlite3 import dbapi2 as sqlite
 
@@ -92,8 +91,8 @@ class LibraryWatch(xbmc.Monitor):
 
 	def openFile(self, path):
 
-		with open(path, "rb") as strm:
-			return strm.read().decode("utf-8")
+		with open(path, "r") as strm:
+			return strm.read()
 
 	def mediaDetailConversion(self, strmData):
 		# "Apollo 13 (1995) Anniversary Edition&aspect_ratio=33&audio_codec=69"
@@ -106,7 +105,6 @@ class LibraryWatch(xbmc.Monitor):
 			"video_height": "iVideoHeight",
 			"video_duration": "iVideoDuration"
 		}
-
 		audioCodes = {
 			"audio_codec": "strAudioCodec",
 			"audio_channels": "iAudioChannels"
