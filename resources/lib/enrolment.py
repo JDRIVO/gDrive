@@ -144,7 +144,7 @@ def page2(clientID, clientSecret):
 	<script>
 		function myFunction() {
 		var x = document.getElementById("google");
-		window.open("https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/drive.readonly&access_type=offline&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&client_id=%s","_blank");
+		window.open("https://accounts.google.com/o/oauth2/auth?scope=https://www.googleapis.com/auth/drive.readonly&access_type=offline&redirect_uri=urn:ietf:wg:oauth:2.0:oob&response_type=code&client_id=%s", "_blank");
 		x.style.display = "none";
 		var x = document.getElementById("form");
 		x.style.display = "block";
