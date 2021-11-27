@@ -1,6 +1,7 @@
 import xbmc
 from threading import Thread
 
+
 class GPlayer(xbmc.Player):
 
 	def __init__(self, *args, **kwargs):
