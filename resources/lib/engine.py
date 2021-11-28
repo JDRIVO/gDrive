@@ -455,7 +455,10 @@ class ContentEngine:
 							)
 						)
 					except:
-						xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30221))
+						xbmcgui.Dialog().ok(
+							SETTINGS.getLocalizedString(30000),
+							SETTINGS.getLocalizedString(30221),
+						)
 						return
 
 					if resumePosition:
