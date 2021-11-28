@@ -169,9 +169,13 @@ msgctxt "#30220"
 msgid "Set fallback account(s)"
 msgstr "Set fallback account(s)"
 
+msgctxt "#30221"
+msgid "The video database set in your gDrive library settings is incompatible with this version of Kodi."
+msgstr "The video database set in your gDrive library settings is incompatible with this version of Kodi."
+
 msgctxt "#30300"
-msgid "Account Management"
-msgstr "Account Management"
+msgid "Accounts"
+msgstr "Accounts"
 
 msgctxt "#30301"
 msgid "Default Account for Playback:"
@@ -194,49 +198,49 @@ msgid "Delete Account(s)"
 msgstr "Delete Account(s)"
 
 msgctxt "#30400"
-msgid "Streamer Configuration"
-msgstr "Streamer Configuration"
+msgid "Library"
+msgstr "Library"
 
 msgctxt "#30401"
-msgid "Watched Status"
-msgstr "Watched Status"
-
-msgctxt "#30402"
 msgid "Mark Movie as Watched at:"
 msgstr "Mark Movie as Watched at:"
 
-msgctxt "#30403"
+msgctxt "#30402"
 msgid "Mark Episode as Watched at:"
 msgstr "Mark Episode as Watched at:"
 
+msgctxt "#30403"
+msgid "Default Playback Action:"
+msgstr "Default Playback Action:"
+
 msgctxt "#30404"
-msgid "Server"
-msgstr "Server"
-
-msgctxt "#30405"
-msgid "Server Port (Requires Restart):"
-msgstr "Server Port (Requires Restart):"
-
-msgctxt "#30406"
-msgid "Crypto"
-msgstr "Crypto"
-
-msgctxt "#30407"
-msgid "Password:"
-msgstr "Password:"
-
-msgctxt "#30408"
-msgid "Salt File:"
-msgstr "Salt File:"
-
-msgctxt "#30500"
-msgid "Media Flag Service"
-msgstr "Media Flag Service"
-
-msgctxt "#30501"
 msgid "Enable Media Flag Background Service (Requires Restart)"
 msgstr "Enable Media Flag Background Service (Requires Restart)"
 
-msgctxt "#30502"
+msgctxt "#30405"
 msgid "Video Database File:"
 msgstr "Video Database File:"
+
+msgctxt "#30500"
+msgid "Streamer"
+msgstr "Streamer"
+
+msgctxt "#30501"
+msgid "Server"
+msgstr "Server"
+
+msgctxt "#30502"
+msgid "Server Port (Requires Restart):"
+msgstr "Server Port (Requires Restart):"
+
+msgctxt "#30503"
+msgid "Crypto"
+msgstr "Crypto"
+
+msgctxt "#30504"
+msgid "Password:"
+msgstr "Password:"
+
+msgctxt "#30505"
+msgid "Salt File:"
+msgstr "Salt File:"

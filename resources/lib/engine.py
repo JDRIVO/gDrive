@@ -406,60 +406,69 @@ class ContentEngine:
 					dbID = xbmc.getInfoLabel("ListItem.DBID")
 					dbType = xbmc.getInfoLabel("ListItem.DBTYPE")
 
-			if dbID:
+			resumePosition = 0
+			resumeOption = False
+			playbackAction = SETTINGS.getSetting("playback_action")
 
-				if dbType == "movie":
-					jsonQuery = xbmc.executeJSONRPC(
-						'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetMovieDetails", "params": {"movieid": %s, "properties": ["resume"]}}'
-						% dbID
-					)
-					jsonKey = "moviedetails"
-				else:
-					jsonQuery = xbmc.executeJSONRPC(
-						'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetEpisodeDetails", "params": {"episodeid": %s, "properties": ["resume"]}}'
-						% dbID
-					)
-					jsonKey = "episodedetails"
+			if playbackAction != "Play from beginning":
 
-				import json
+				if dbID:
 
-				jsonResponse = json.loads(jsonQuery.encode("utf-8"))
-
-				try:
-					resumeData = jsonResponse["result"][jsonKey]["resume"]
-				except:
-					return
-
-				resumePosition = resumeData["position"]
-				videoLength = resumeData["total"]
-
-			elif filePath:
-				from sqlite3 import dbapi2 as sqlite
-
-				dbPath = xbmc.translatePath(SETTINGS.getSetting("video_db"))
-				db = sqlite.connect(dbPath)
-				dirPath = os.path.dirname(filePath) + os.sep
-				fileName = os.path.basename(filePath)
-				resumePosition = list(
-					db.execute(
-						"SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
-						(dirPath, fileName)
-					)
-				)
-
-				if resumePosition:
-					resumePosition = resumePosition[0][0]
-					videoLength = list(
-						db.execute(
-							"SELECT totalTimeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
-							(dirPath, fileName)
+					if dbType == "movie":
+						jsonQuery = xbmc.executeJSONRPC(
+							'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetMovieDetails", "params": {"movieid": %s, "properties": ["resume"]}}'
+							% dbID
 						)
-					)[0][0]
-				else:
-					resumePosition = 0
+						jsonKey = "moviedetails"
+					else:
+						jsonQuery = xbmc.executeJSONRPC(
+							'{"jsonrpc": "2.0", "id": "1", "method": "VideoLibrary.GetEpisodeDetails", "params": {"episodeid": %s, "properties": ["resume"]}}'
+							% dbID
+						)
+						jsonKey = "episodedetails"
 
-			else:
-				resumePosition = 0
+					import json
+
+					jsonResponse = json.loads(jsonQuery.encode("utf-8"))
+
+					try:
+						resumeData = jsonResponse["result"][jsonKey]["resume"]
+					except:
+						return
+
+					resumePosition = resumeData["position"]
+					videoLength = resumeData["total"]
+
+				elif filePath:
+					from sqlite3 import dbapi2 as sqlite
+
+					dbPath = xbmc.translatePath(SETTINGS.getSetting("video_db"))
+					db = sqlite.connect(dbPath)
+					dirPath = os.path.dirname(filePath) + os.sep
+					fileName = os.path.basename(filePath)
+
+					try:
+						resumePosition = list(
+							db.execute(
+								"SELECT timeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
+								(dirPath, fileName)
+							)
+						)
+					except:
+						xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30221))
+						return
+
+					if resumePosition:
+						resumePosition = resumePosition[0][0]
+						videoLength = list(
+							db.execute(
+								"SELECT totalTimeInSeconds FROM bookmark WHERE idFile=(SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?)",
+								(dirPath, fileName)
+							)
+						)[0][0]
+					else:
+						resumePosition = 0
+
 
 				# import pickle
 
@@ -486,20 +495,23 @@ class ContentEngine:
 				# else:
 					# resumePosition = 0
 
-			resumeOption = False
-
 			if resumePosition > 0:
-				options = ("Resume from " + str(time.strftime("%H:%M:%S", time.gmtime(resumePosition))), "Play from beginning")
-				selection = xbmcgui.Dialog().contextmenu(options)
 
-				if selection == 0:
-					# resumePosition = resumePosition / total * 100
+				if playbackAction == "Resume prompt":
+					options = ("Resume from " + str(time.strftime("%H:%M:%S", time.gmtime(resumePosition))), "Play from beginning")
+					selection = xbmcgui.Dialog().contextmenu(options)
+
+					if selection == 0:
+						# resumePosition = resumePosition / total * 100
+						resumeOption = True
+					# elif selection == 1:
+						# resumePosition = "0"
+						# videoData[filename] = 0
+					elif selection == -1:
+						return
+
+				else:
 					resumeOption = True
-				# elif selection == 1:
-					# resumePosition = "0"
-					# videoData[filename] = 0
-				elif selection == -1:
-					return
 
 			# file ID
 			driveID = SETTINGS.getParameter("filename")

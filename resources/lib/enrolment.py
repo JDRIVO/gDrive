@@ -124,11 +124,11 @@ def page2(clientID, clientSecret):
 	</head>
 	<body>
 		<div class="container">
-			<button class="button button1" id=google onclick="myFunction()" >
+			<button class="button button1" id="google" onclick="myFunction()" >
 			Click to get your code then fill the next form
 			</button>
 			<form action="/enroll" method="post">
-				<div class="inner" id=form>
+				<div class="inner" id="form">
 					<input div class="input" style="color:white" type="text" name="account" placeholder="Account name">
 					<br/>
 					<br/>
