@@ -472,7 +472,6 @@ class ContentEngine:
 					else:
 						resumePosition = 0
 
-
 				# import pickle
 
 				# resumeDBPath = xbmc.translatePath(SETTINGS.resumeDBPath)
