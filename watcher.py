@@ -6,8 +6,8 @@ from sqlite3 import dbapi2 as sqlite
 
 
 def run():
-	watcher = LibraryWatch()
 	monitor = xbmc.Monitor()
+	watcher = LibraryWatch()
 
 	while not monitor.abortRequested() and watcher.enabled:
 
