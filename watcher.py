@@ -158,8 +158,6 @@ class LibraryWatch(xbmc.Monitor):
 
 		if converted:
 			return converted
-		else:
-			return None
 
 	def jsonQuery(self, query):
 		query = json.dumps(query)

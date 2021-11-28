@@ -202,12 +202,12 @@ msgid "Library"
 msgstr "Library"
 
 msgctxt "#30401"
-msgid "Mark Movie as Watched at:"
-msgstr "Mark Movie as Watched at:"
+msgid "Mark Movies as Watched at:"
+msgstr "Mark Movies as Watched at:"
 
 msgctxt "#30402"
-msgid "Mark Episode as Watched at:"
-msgstr "Mark Episode as Watched at:"
+msgid "Mark Episodes as Watched at:"
+msgstr "Mark Episodes as Watched at:"
 
 msgctxt "#30403"
 msgid "Default Playback Action:"
