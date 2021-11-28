@@ -499,7 +499,7 @@ class ContentEngine:
 
 			if resumePosition > 0:
 
-				if playbackAction == "Resume prompt":
+				if playbackAction == "Show resume prompt":
 					options = ("Resume from " + str(time.strftime("%H:%M:%S", time.gmtime(resumePosition))), "Play from beginning")
 					selection = xbmcgui.Dialog().contextmenu(options)
 

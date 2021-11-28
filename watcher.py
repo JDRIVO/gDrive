@@ -9,9 +9,9 @@ def run():
 	watcher = LibraryWatch()
 	monitor = xbmc.Monitor()
 
-	while not monitor.abortRequested():
+	while not monitor.abortRequested() and watcher.enabled:
 
-		if monitor.waitForAbort(1) or not watcher.enabled:
+		if monitor.waitForAbort(1):
 			break
 
 
@@ -59,13 +59,21 @@ class LibraryWatch(xbmc.Monitor):
 				if not mediaDetails:
 					return
 
-				databaseQuery = self.databaseAction(
-					"select",
-					(
-						"SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?",
-						(strmDir, strmName),
-					),
-				)
+				try:
+					databaseQuery = self.databaseAction(
+						"select",
+						(
+							"SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?",
+							(strmDir, strmName),
+						),
+					)
+				except:
+					xbmc.log(
+						self.settings.getLocalizedString(30003) + ": " + self.settings.getLocalizedString(30221),
+						xbmc.LOGERROR,
+					)
+					return
+
 				fileId = databaseQuery[0][0]
 				insertParams = []
 
