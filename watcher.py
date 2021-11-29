@@ -139,7 +139,7 @@ class LibraryMonitor(xbmc.Monitor):
 		for names, values in mediaInfo:
 			names.append("idFile")
 			values.append(fileID)
-			reconstruct = "".join(
+			condition = "".join(
 				[
 					"{}='{}' AND ".format(name, values[count])
 					if name != names[-1]
@@ -151,7 +151,7 @@ class LibraryMonitor(xbmc.Monitor):
 			values = str(values)[1:-1]
 			statements.append(
 				"INSERT INTO streamdetails ({}) SELECT {} WHERE NOT EXISTS (SELECT 1 FROM streamdetails WHERE {})".format(
-					names, values, reconstruct
+					names, values, condition
 				)
 			)
 
