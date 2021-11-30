@@ -64,9 +64,13 @@ class LibraryMonitor(xbmc.Monitor):
 
 			strmPath = jsonResponse["result"][jsonKey]["file"]
 			strmName = os.path.basename(strmPath)
+			ext = os.path.splitext(strmName)[1]
+
+			if ext != ".strm":
+				return
+
 			strmDir = os.path.dirname(strmPath) + os.sep
 			strmData = self.openFile(strmPath)
-
 			mediaInfo = self.mediaInfoConversion(strmData)
 
 			if not mediaInfo:
