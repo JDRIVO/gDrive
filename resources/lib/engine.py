@@ -344,6 +344,8 @@ class ContentEngine:
 				accountName = accountNames[index_]
 				accountNumber = accountNumbers[index_]
 				validated = accountActions.validateAccount(instanceName, userAgent)
+				dialog.update(int(round(count / total * 100)), accountName)
+				count += 1
 
 				if not validated:
 					selection = xbmcgui.Dialog().yesno(
@@ -359,9 +361,6 @@ class ContentEngine:
 
 					if accountName in fallbackAccountNames:
 						accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
-
-				dialog.update(int(round(count / total * 100)), accountName)
-				count += 1
 
 			dialog.close()
 			xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30020))
