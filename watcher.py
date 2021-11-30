@@ -61,16 +61,15 @@ class LibraryMonitor(xbmc.Monitor):
 				jsonKey = "episodedetails"
 
 			jsonResponse = self.jsonQuery(query)
+			filePath = jsonResponse["result"][jsonKey]["file"]
+			fileName = os.path.basename(filePath)
+			fileExt = os.path.splitext(fileName)[1]
 
-			strmPath = jsonResponse["result"][jsonKey]["file"]
-			strmName = os.path.basename(strmPath)
-			ext = os.path.splitext(strmName)[1]
-
-			if ext != ".strm":
+			if fileExt != ".strm":
 				return
 
-			strmDir = os.path.dirname(strmPath) + os.sep
-			strmData = self.openFile(strmPath)
+			fileDir = os.path.dirname(filePath) + os.sep
+			strmData = self.openFile(filePath)
 			mediaInfo = self.mediaInfoConversion(strmData)
 
 			if not mediaInfo:
@@ -80,7 +79,7 @@ class LibraryMonitor(xbmc.Monitor):
 				fileID = self.select(
 					(
 						"SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath=?) AND strFilename=?",
-						(strmDir, strmName),
+						(fileDir, fileName),
 					),
 				)
 			except:

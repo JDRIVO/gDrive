@@ -329,9 +329,17 @@ class ContentEngine:
 			if not selection:
 				return
 
+			count = 1
 			deleted = False
+			total = len(selection)
+			dialog = xbmcgui.DialogProgress()
+			dialog.create(SETTINGS.getLocalizedString(30306))
 
 			for index_ in selection:
+
+				if dialog.iscanceled():
+					return
+
 				instanceName = accountInstances[index_]
 				accountName = accountNames[index_]
 				accountNumber = accountNumbers[index_]
@@ -352,6 +360,10 @@ class ContentEngine:
 					if accountName in fallbackAccountNames:
 						accountActions.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
 
+				dialog.update(int(round(count / total * 100)), accountName)
+				count += 1
+
+			dialog.close()
 			xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30020))
 
 			if deleted:
