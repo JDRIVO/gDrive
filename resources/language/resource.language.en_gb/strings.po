@@ -198,8 +198,8 @@ msgid "Delete Account(s)"
 msgstr "Delete Account(s)"
 
 msgctxt "#30306"
-msgid "Processing"
-msgstr "Processing"
+msgid "Validating"
+msgstr "Validating"
 
 msgctxt "#30400"
 msgid "Library"
