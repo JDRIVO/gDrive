@@ -218,10 +218,14 @@ msgid "Default Playback Action:"
 msgstr "Default Playback Action:"
 
 msgctxt "#30404"
+msgid "Subtitle Structure:"
+msgstr "Subtitle Structure:"
+
+msgctxt "#30405"
 msgid "Enable Media Flag Background Service (Requires Restart)"
 msgstr "Enable Media Flag Background Service (Requires Restart)"
 
-msgctxt "#30405"
+msgctxt "#30406"
 msgid "Video Database File:"
 msgstr "Video Database File:"
 
