@@ -422,6 +422,7 @@ class ContentEngine:
 					xbmc.executebuiltin("Dialog.Close(busydialog)")
 					dbID = xbmc.getInfoLabel("ListItem.DBID")
 					dbType = xbmc.getInfoLabel("ListItem.DBTYPE")
+					filePath = xbmc.getInfoLabel("ListItem.FileNameAndPath")
 
 			resumePosition = 0
 			resumeOption = False
