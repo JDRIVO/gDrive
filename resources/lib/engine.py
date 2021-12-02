@@ -125,6 +125,13 @@ class AccountActions:
 
 class ContentEngine:
 
+	@staticmethod
+	def escape(path):
+		magicCheck = re.compile('([*?[])')
+		drive, tail = os.path.splitdrive(path)
+		tail = magicCheck.sub(r'[\1]', tail)
+		return drive + tail
+
 	def addMenu(self, url, title, totalItems=0, instanceName=None):
 		listitem = xbmcgui.ListItem(title)
 
@@ -551,10 +558,10 @@ class ContentEngine:
 				item.setProperty("resumetime", str(resumePosition))
 
 			if SETTINGS.getSetting("subtitles") == "Subtitles are named the same as STRM":
-				subtitles = glob.glob(r"{}".format(filePath.replace(".strm", "")) + "*[!m]")
+				subtitles = glob.glob(self.escape(filePath.replace(".strm", "")) + "*[!m]")
 				item.setSubtitles(subtitles)
 			else:
-				subtitles = glob.glob(r"{}".format(os.path.dirname(filePath) + os.sep) + "*[!m]")
+				subtitles = glob.glob(self.escape(os.path.dirname(filePath) + os.sep) + "*[!m]")
 				item.setSubtitles(subtitles)
 
 			xbmcplugin.setResolvedUrl(PLUGIN_HANDLE, True, item)
