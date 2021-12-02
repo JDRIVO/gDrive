@@ -127,9 +127,9 @@ class ContentEngine:
 
 	@staticmethod
 	def escape(path):
-		magicCheck = re.compile('([*?[])')
+		magicCheck = re.compile("([*?[])")
 		drive, tail = os.path.splitdrive(path)
-		tail = magicCheck.sub(r'[\1]', tail)
+		tail = magicCheck.sub(r"[\1]", tail)
 		return drive + tail
 
 	def addMenu(self, url, title, totalItems=0, instanceName=None):
