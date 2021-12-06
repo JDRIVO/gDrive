@@ -85,14 +85,6 @@ msgctxt "#30024"
 msgid "Account Validation"
 msgstr "Account Validation"
 
-msgctxt "#30051"
-msgid "Your login failed."
-msgstr "Your login failed."
-
-msgctxt "#30052"
-msgid "Ensure that your username and password are set in settings."
-msgstr "Ensure that your username and password are set in settings."
-
 msgctxt "#30118"
 msgid "The following account was enrolled:"
 msgstr "The following account was enrolled:"

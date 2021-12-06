@@ -405,16 +405,6 @@ class ContentEngine:
 				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30208))
 				return
 
-			try:
-				service
-			except NameError:
-				xbmcgui.Dialog().ok(
-					SETTINGS.getLocalizedString(30000),
-					SETTINGS.getLocalizedString(30051) + " " + SETTINGS.getLocalizedString(30052),
-				)
-				xbmc.log(SETTINGS.getLocalizedString(30051) + PLUGIN_NAME + "-login", xbmc.LOGERROR)
-				return
-
 			if (not dbID or not dbType) and not filePath:
 				timeEnd = time.time() + 1
 
