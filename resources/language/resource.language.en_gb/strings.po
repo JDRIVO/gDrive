@@ -170,8 +170,8 @@ msgid "Accounts"
 msgstr "Accounts"
 
 msgctxt "#30301"
-msgid "Default Account for Playback:"
-msgstr "Default Account for Playback:"
+msgid "Default Playback Account:"
+msgstr "Default Playback Account:"
 
 msgctxt "#30302"
 msgid "Enable Account Fallback When API Banned"
