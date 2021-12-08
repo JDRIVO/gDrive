@@ -44,30 +44,18 @@ class GDrive:
 		self.PLUGIN_URL = PLUGIN_URL
 		self.settings = settings
 		self.instanceName = instanceName
+
+		self.authorization = authorization.Authorization()
 		self.cookiejar = cookielib.CookieJar()
 		self.userAgent = userAgent
 		self.failed = False
-
-		try:
-			username = self.getInstanceSetting("username")
-			# username = self.getInstanceSetting(str(instanceName) + "_username")
-		except:
-			username = ""
-
-		self.authorization = authorization.Authorization(username)
 
 		# load the OAUTH2 tokens or force fetch if not set
 		if authenticate == True and (
 			not self.authorization.loadToken(self.instanceName, self.settings, "auth_access_token")
 			or not self.authorization.loadToken(self.instanceName, self.settings, "auth_refresh_token")
 		):
-
-			if self.getInstanceSetting("code"):
-				self.getToken(self.getInstanceSetting("code"))
-			else:
-				# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30003), self.settings.getLocalizedString(30005))
-				self.failed = True
-				return
+			self.getToken(self.getInstanceSetting("code"))
 
 	##
 	# get OAUTH2 access and refresh token for provided code

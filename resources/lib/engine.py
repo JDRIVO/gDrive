@@ -389,16 +389,18 @@ class ContentEngine:
 				xbmc.executebuiltin("Container.Refresh")
 
 		elif mode == "video":
-			instanceName = PLUGIN_NAME + str(SETTINGS.getSetting("default_account"))
-			service = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
+			defaultAccount = SETTINGS.getSetting("default_account")
 
-			if service.failed:
+			if not defaultAccount:
 				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30005))
 				return
 
 			if not SETTINGS.getSetting("crypto_password") or not SETTINGS.getSetting("crypto_salt"):
 				xbmcgui.Dialog().ok(SETTINGS.getLocalizedString(30000), SETTINGS.getLocalizedString(30208))
 				return
+
+			instanceName = PLUGIN_NAME + defaultAccount
+			service = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
 
 			if (not dbID or not dbType) and not filePath:
 				timeEnd = time.time() + 1
@@ -524,7 +526,7 @@ class ContentEngine:
 			serverPort = SETTINGS.getSettingInt("server_port", 8011)
 
 			url = "http://localhost:{}/crypto_playurl".format(serverPort)
-			data = "instance={}&url={}".format(service.instanceName, driveURL)
+			data = "instance={}&url={}".format(instanceName, driveURL)
 			req = urllib2.Request(url, data.encode("utf-8"))
 
 			try:

@@ -129,65 +129,64 @@ class MyStreamer(BaseHTTPRequestHandler):
 			for r in re.finditer("account=([^&]+)&code=([^&]+)&client_id=([^&]+)&client_secret=([^&]+)", postData, re.DOTALL):
 				account, code, clientID, clientSecret = r.groups()
 				code = code.replace("%2F", "/")
-				count = 1
 
-				while True:
-					instanceName = self.server.PLUGIN_NAME + str(count)
+			url = "https://accounts.google.com/o/oauth2/token"
+			header = {"User-Agent": self.server.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
+			url = "https://accounts.google.com/o/oauth2/token"
+			data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
+				code, clientID, clientSecret
+			)
+			req = urllib2.Request(url, data.encode("utf-8"), header)
 
-					try:
-						username = self.server.settings.getSetting(instanceName + "_username")
-					except:
-						username = False
-
-					if not username or username == account:
-						self.server.settings.setSetting(instanceName + "_username", account)
-						self.server.settings.setSetting(instanceName + "_code", code)
-						self.server.settings.setSetting(instanceName + "_client_id", clientID)
-						self.server.settings.setSetting(instanceName + "_client_secret", clientSecret)
-
-						if not self.server.settings.getSetting("default_account"):
-							self.server.settings.setSetting("default_account", str(count))
-							self.server.settings.setSetting("default_account_ui", account)
-
-						if count > self.server.settings.getSettingInt("account_amount"):
-							self.server.settings.setSettingInt("account_amount", count)
-
-						break
-
-					count += 1
-
-				url = "https://accounts.google.com/o/oauth2/token"
-				header = {"User-Agent": self.server.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
-				url = "https://accounts.google.com/o/oauth2/token"
-				data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
-					code, clientID, clientSecret
-				)
-				req = urllib2.Request(url, data.encode("utf-8"), header)
-
-				# try login
-				try:
-					response = urllib2.urlopen(req)
-				except urllib2.URLError as e:
-					self.send_response(200)
-					self.end_headers()
-					self.wfile.write(str(e).encode("utf-8"))
-					return
-
-				responseData = response.read().decode("utf-8")
-				response.close()
-
-				# retrieve authorization token
-				for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?' + '\"refresh_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
-					accessToken, refreshToken = r.groups()
-					self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
-					self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
-					self.wfile.write(b"Successfully enrolled account.")
-
-				for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):
-					errorMessage = r.group(1)
-					self.wfile.write(errorMessage.encode("utf-8"))
-
+			# try login
+			try:
+				response = urllib2.urlopen(req)
+			except urllib2.URLError as e:
+				self.send_response(200)
+				self.end_headers()
+				self.wfile.write(str(e).encode("utf-8"))
 				return
+
+			responseData = response.read().decode("utf-8")
+			response.close()
+
+			accountNumber = 1
+
+			while True:
+				instanceName = self.server.PLUGIN_NAME + str(accountNumber)
+
+				try:
+					username = self.server.settings.getSetting(instanceName + "_username")
+				except:
+					username = False
+
+				if not username or username == account:
+					self.server.settings.setSetting(instanceName + "_username", account)
+					self.server.settings.setSetting(instanceName + "_code", code)
+					self.server.settings.setSetting(instanceName + "_client_id", clientID)
+					self.server.settings.setSetting(instanceName + "_client_secret", clientSecret)
+
+					if not self.server.settings.getSetting("default_account"):
+						self.server.settings.setSetting("default_account", str(accountNumber))
+						self.server.settings.setSetting("default_account_ui", account)
+
+					if accountNumber > self.server.settings.getSettingInt("account_amount"):
+						self.server.settings.setSettingInt("account_amount", accountNumber)
+
+					break
+
+				accountNumber += 1
+
+			# retrieve authorization token
+			for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?' + '\"refresh_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
+				accessToken, refreshToken = r.groups()
+				self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
+				self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
+				self.wfile.write(b"Successfully enrolled account.")
+
+			for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):
+				errorMessage = r.group(1)
+				self.wfile.write(errorMessage.encode("utf-8"))
 
 	def do_HEAD(self):
 		# debug - print headers in log
