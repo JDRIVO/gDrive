@@ -137,16 +137,20 @@ class MyStreamer(BaseHTTPRequestHandler):
 					try:
 						username = self.server.settings.getSetting(instanceName + "_username")
 					except:
-						username = ""
+						username = False
 
-					if username == account or username == "":
-						self.server.settings.setSetting(instanceName + "_username", str(account))
-						self.server.settings.setSetting(instanceName + "_code", str(code))
-						self.server.settings.setSetting(instanceName + "_client_id", str(clientID))
-						self.server.settings.setSetting(instanceName + "_client_secret", str(clientSecret))
+					if not username or username == account:
+						self.server.settings.setSetting(instanceName + "_username", account)
+						self.server.settings.setSetting(instanceName + "_code", code)
+						self.server.settings.setSetting(instanceName + "_client_id", clientID)
+						self.server.settings.setSetting(instanceName + "_client_secret", clientSecret)
+
+						if not self.server.settings.getSetting("default_account"):
+							self.server.settings.setSetting("default_account", str(count))
+							self.server.settings.setSetting("default_account_ui", account)
 
 						if count > self.server.settings.getSettingInt("account_amount"):
-							self.server.settings.setSetting("account_amount", str(count))
+							self.server.settings.setSettingInt("account_amount", count)
 
 						break
 
@@ -175,8 +179,8 @@ class MyStreamer(BaseHTTPRequestHandler):
 				# retrieve authorization token
 				for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?' + '\"refresh_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
 					accessToken, refreshToken = r.groups()
-					self.server.settings.setSetting(instanceName + "_auth_access_token", str(accessToken))
-					self.server.settings.setSetting(instanceName + "_auth_refresh_token", str(refreshToken))
+					self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
+					self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
 					self.wfile.write(b"Successfully enrolled account.")
 
 				for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):

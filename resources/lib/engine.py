@@ -389,7 +389,7 @@ class ContentEngine:
 				xbmc.executebuiltin("Container.Refresh")
 
 		elif mode == "video":
-			instanceName = PLUGIN_NAME + str(SETTINGS.getSetting("default_account", 1))
+			instanceName = PLUGIN_NAME + str(SETTINGS.getSetting("default_account"))
 			service = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
 
 			if service.failed:

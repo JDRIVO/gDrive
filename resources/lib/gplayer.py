@@ -9,15 +9,15 @@ class GPlayer(xbmc.Player):
 		self.dbID = kwargs["dbID"]
 		self.dbType = kwargs["dbType"]
 		self.widget = kwargs["widget"]
-		self.settings = kwargs["settings"]
 		self.trackProgress = kwargs["trackProgress"]
+		settings = kwargs["settings"]
 
 		if self.dbType == "movie":
 			self.isMovie = True
-			self.markedWatchedPoint = float(self.settings.getSetting("movie_watch_time"))
+			self.markedWatchedPoint = float(settings.getSetting("movie_watch_time"))
 		else:
 			self.isMovie = False
-			self.markedWatchedPoint = float(self.settings.getSetting("tv_watch_time"))
+			self.markedWatchedPoint = float(settings.getSetting("tv_watch_time"))
 
 		xbmc.sleep(2000)
 
