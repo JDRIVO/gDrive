@@ -71,9 +71,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 	# Handler for the GET requests
 	def do_POST(self):
-		# debug - print headers in log
-		headers = str(self.headers)
-		print(headers)
 
 		if self.path == "/crypto_playurl":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
@@ -178,7 +175,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 		# redirect url to output
 		if self.path == "/play":
-			headers = str(self.headers)
 			url = self.server.playbackURL
 			xbmc.log("HEAD " + url + "\n")
 			req = urllib2.Request(url, None, self.server.service.getHeadersList())
@@ -287,8 +283,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 		# redirect url to output
 		if self.path == "/play":
-			headers = str(self.headers)
-			start, end = re.findall("Range: bytes=([\d]+)-([\d]+)?", headers, re.DOTALL)[0]
+			start, end = re.findall("Range: bytes=([\d]+)-([\d]+)?", str(self.headers), re.DOTALL)[0]
 			if start: start = int(start)
 			if end: end = int(end)
 			startOffset = 0
