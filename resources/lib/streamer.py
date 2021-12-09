@@ -78,20 +78,17 @@ class MyStreamer(BaseHTTPRequestHandler):
 		if self.path == "/crypto_playurl":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
+			instanceName, url = re.findall("instance=(.*)&url=(.*)", postData)[0]
+			xbmc.log("url = " + url + "\n")
+			self.server.service = constants.cloudservice2(
+				self.server.PLUGIN_HANDLE,
+				self.server.PLUGIN_URL,
+				self.server.settings,
+				instanceName,
+				self.server.userAgent,
+			)
 
-			for r in re.finditer("instance\=([^\&]+)\&url\=([^\|]+)", postData, re.DOTALL):
-				instanceName, url = r.groups()
-				xbmc.log("url = " + url + "\n")
-				cloudservice2 = constants.cloudservice2
-				self.server.service = cloudservice2(
-					self.server.PLUGIN_HANDLE,
-					self.server.PLUGIN_URL,
-					self.server.settings,
-					instanceName,
-					self.server.userAgent,
-				)
-				self.server.playbackURL = url
-
+			self.server.playbackURL = url
 			self.server.service.refreshToken()
 			self.send_response(200)
 			self.end_headers()
@@ -100,11 +97,9 @@ class MyStreamer(BaseHTTPRequestHandler):
 			contentLength = int(self.headers["Content-Length"])
 			postData = self.rfile.read(contentLength).decode("utf-8")
 			self.send_response(200)
+
 			self.end_headers()
-
-			for r in re.finditer("dbid\=([^\&]+)\&dbtype\=([^\|]+)\&widget\=([^\|]+)\&track\=([^\|]+)", postData, re.DOTALL):
-				dbID, dbType, widget, trackProgress = r.groups()
-
+			dbID, dbType, widget, trackProgress = re.findall("dbid=([\d]+)&dbtype=(.*)&widget=(\d)&track=(\d)", postData)[0]
 			Thread(target=self.server.startGPlayer, args=(dbID, dbType, widget, trackProgress)).start()
 
 		# redirect url to output
@@ -114,10 +109,9 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.end_headers()
 
-			for r in re.finditer("client_id=([^&]+)&client_secret=([^&]+)", postData, re.DOTALL):
-				clientID, clientSecret = r.groups()
-				data = enrolment.page2(clientID, clientSecret)
-				self.wfile.write(data.encode("utf-8"))
+			clientID, clientSecret = re.findall("client_id=(.*)&client_secret=(.*)", postData)[0]
+			data = enrolment.page2(clientID, clientSecret)
+			self.wfile.write(data.encode("utf-8"))
 
 		# redirect url to output
 		elif self.path == "/enroll":
@@ -126,13 +120,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.end_headers()
 
-			for r in re.finditer("account=([^&]+)&code=([^&]+)&client_id=([^&]+)&client_secret=([^&]+)", postData, re.DOTALL):
-				account, code, clientID, clientSecret = r.groups()
-				code = code.replace("%2F", "/")
-
+			account, code, clientID, clientSecret = re.findall("account=(.*)&code=(.*)&client_id=(.*)&client_secret=(.*)", postData)[0]
+			code = code.replace("%2F", "/")
 			url = "https://accounts.google.com/o/oauth2/token"
 			header = {"User-Agent": self.server.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
-			url = "https://accounts.google.com/o/oauth2/token"
 			data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
 				code, clientID, clientSecret
 			)
@@ -178,23 +169,16 @@ class MyStreamer(BaseHTTPRequestHandler):
 				accountNumber += 1
 
 			# retrieve authorization token
-			for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?' + '\"refresh_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
-				accessToken, refreshToken = r.groups()
-				self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
-				self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
-				self.wfile.write(b"Successfully enrolled account.")
-
-			for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):
-				errorMessage = r.group(1)
-				self.wfile.write(errorMessage.encode("utf-8"))
+			accessToken, refreshToken = re.findall('access_token": "(.*?)".*refresh_token": "(.*?)"', responseData, re.DOTALL)[0]
+			self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
+			self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
+			self.wfile.write(b"Successfully enrolled account.")
 
 	def do_HEAD(self):
-		# debug - print headers in log
-		headers = str(self.headers)
-		print(headers)
 
 		# redirect url to output
 		if self.path == "/play":
+			headers = str(self.headers)
 			url = self.server.playbackURL
 			xbmc.log("HEAD " + url + "\n")
 			req = urllib2.Request(url, None, self.server.service.getHeadersList())
@@ -233,8 +217,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 							continue
 
 						try:
-							cloudservice2 = constants.cloudservice2
-							self.server.service = cloudservice2(
+							self.server.service = constants.cloudservice2(
 								self.server.PLUGIN_HANDLE,
 								self.server.PLUGIN_URL,
 								self.server.settings,
@@ -242,7 +225,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 								self.server.userAgent,
 							)
 							self.server.service.refreshToken()
-
 							req = urllib2.Request(url, None, self.server.service.getHeadersList())
 							req.get_method = lambda: "HEAD"
 							response = urllib2.urlopen(req)
@@ -302,25 +284,16 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 	# Handler for the GET requests
 	def do_GET(self):
-		# debug - print headers in log
-		headers = str(self.headers)
-		print(headers)
-
-		start = end = ""
-		startOffset = 0
-
-		for r in re.finditer("Range\:\s+bytes\=(\d+)\-", headers, re.DOTALL):
-			start = int(r.group(1))
-			break
-
-		for r in re.finditer("Range\:\s+bytes\=\d+\-(\d+)", headers, re.DOTALL):
-			end = int(r.group(1))
-			break
 
 		# redirect url to output
 		if self.path == "/play":
+			headers = str(self.headers)
+			start, end = re.findall("Range: bytes=([\d]+)-([\d]+)?", headers, re.DOTALL)[0]
+			if start: start = int(start)
+			if end: end = int(end)
+			startOffset = 0
 
-			if start != "" and start > 16 and end == "":
+			if start and start > 16 and not end:
 				# start = start - (16 - (end % 16))
 				xbmc.log("START = " + str(start))
 				startOffset = 16 - ((int(self.server.length) - start) % 16) + 8
@@ -332,7 +305,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 			url = self.server.playbackURL
 			xbmc.log("GET " + url + "\n" + self.server.service.getHeadersEncoded() + "\n")
 
-			if start == "":
+			if not start:
 				req = urllib2.Request(url, None, self.server.service.getHeadersList())
 			else:
 				req = urllib2.Request(
@@ -362,7 +335,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 				else:
 					return
 
-			if start == "":
+			if not start:
 				self.send_response(200)
 				self.send_header("Content-Length", response.info().get("Content-Length"))
 			else:
@@ -370,7 +343,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 				self.send_header("Content-Length", str(int(response.info().get("Content-Length")) - startOffset))
 				# self.send_header("Content-Range", "bytes " + str(start) + "-" + str(end))
 
-				if end == "":
+				if not end:
 					self.send_header("Content-Range", "bytes {}-{}/{}".format(start, int(self.server.length) - 1, self.server.length))
 				else:
 					self.send_header("Content-Range", "bytes {}-{}/{}".format(start, end, self.server.length))
@@ -392,7 +365,11 @@ class MyStreamer(BaseHTTPRequestHandler):
 			# self.wfile.write(response.read())
 
 			decrypt = encryption.Encryption(self.server.settings.getSetting("crypto_salt"), self.server.settings.getSetting("crypto_password"))
-			decrypt.decryptStreamChunkOld(response, self.wfile, startOffset=startOffset)
+
+			try:
+				decrypt.decryptStreamChunkOld(response, self.wfile, startOffset=startOffset)
+			except Exception as e:
+				xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
 
 			response.close()
 
@@ -401,4 +378,3 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.end_headers()
 			self.wfile.write(enrolment.page1)
-			return
