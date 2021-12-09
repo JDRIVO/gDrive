@@ -187,10 +187,12 @@ class MyStreamer(BaseHTTPRequestHandler):
 				if e.code == 404:
 					xbmcgui.Dialog().ok(self.server.settings.getLocalizedString(30003), self.server.settings.getLocalizedString(30209))
 					return
+
 				elif e.code == 401:
 					xbmc.log("ERROR\n" + self.server.service.getHeadersEncoded())
 					xbmcgui.Dialog().ok(self.server.settings.getLocalizedString(30003), self.server.settings.getLocalizedString(30018))
 					return
+
 				elif e.code == 403 or e.code == 429:
 					xbmc.log("ERROR\n" + self.server.service.getHeadersEncoded())
 
