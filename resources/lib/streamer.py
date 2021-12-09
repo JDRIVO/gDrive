@@ -19,6 +19,7 @@
 
 import re
 import time
+import urllib
 import urllib2
 import xbmc
 import xbmcgui
@@ -114,11 +115,11 @@ class MyStreamer(BaseHTTPRequestHandler):
 		elif self.path == "/enroll":
 			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8")  # <--- Gets the data itself
+			postData = urllib.unquote_plus(postData)
 			self.send_response(200)
 			self.end_headers()
 
 			account, code, clientID, clientSecret = re.findall("account=(.*)&code=(.*)&client_id=(.*)&client_secret=(.*)", postData)[0]
-			code = code.replace("%2F", "/")
 			url = "https://accounts.google.com/o/oauth2/token"
 			header = {"User-Agent": self.server.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
 			data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
