@@ -171,6 +171,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
 			self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
 			self.wfile.write(b"Successfully enrolled account.")
+			errorMessage = re.findall('"error_description": "(.*)"', responseData)
+
+			if errorMessage:
+				self.wfile.write(errorMessage[0].encode("utf-8"))
 
 	def do_HEAD(self):
 
@@ -215,41 +219,44 @@ class MyStreamer(BaseHTTPRequestHandler):
 							fallbackAccounts.remove(fallbackAccount)
 							continue
 
+						self.server.service = constants.cloudservice2(
+							self.server.PLUGIN_HANDLE,
+							self.server.PLUGIN_URL,
+							self.server.settings,
+							"gdrive" + fallbackAccount,
+							self.server.userAgent,
+						)
+						self.server.service.refreshToken()
+
+						if self.server.service.failed:
+							continue
+
 						try:
-							self.server.service = constants.cloudservice2(
-								self.server.PLUGIN_HANDLE,
-								self.server.PLUGIN_URL,
-								self.server.settings,
-								"gdrive" + fallbackAccount,
-								self.server.userAgent,
-							)
-							self.server.service.refreshToken()
 							req = urllib2.Request(url, None, self.server.service.getHeadersList())
 							req.get_method = lambda: "HEAD"
 							response = urllib2.urlopen(req)
-
-							if not defaultAccount in fallbackAccounts:
-								fallbackAccounts.append(defaultAccount)
-
-							fallbackAccounts.remove(fallbackAccount)
-							self.server.settings.setSetting("default_account", fallbackAccount)
-							self.server.settings.setSetting("default_account_ui", username)
-							accountChange = True
-							xbmcgui.Dialog().notification(
-								self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),
-								self.server.settings.getLocalizedString(30007),
-							)
-							break
-
 						except:
 							continue
+
+						if not defaultAccount in fallbackAccounts:
+							fallbackAccounts.append(defaultAccount)
+
+						fallbackAccounts.remove(fallbackAccount)
+						self.server.settings.setSetting("default_account", fallbackAccount)
+						self.server.settings.setSetting("default_account_ui", username)
+						accountChange = True
+						xbmcgui.Dialog().notification(
+							self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),
+							self.server.settings.getLocalizedString(30007),
+						)
+						break
 
 					self.server.settings.setSetting("fallback_accounts", ",".join(fallbackAccounts))
 					self.server.settings.setSetting(
 						"fallback_accounts_ui",
 						", ".join(
-							self.server.settings.getSetting("gdrive{}_username".format(x))
-							for x in fallbackAccounts
+							self.server.settings.getSetting("gdrive{}_username".format(n))
+							for n in fallbackAccounts
 						)
 					)
 

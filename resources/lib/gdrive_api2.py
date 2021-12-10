@@ -77,7 +77,6 @@ class GDrive:
 		try:
 			response = urllib2.urlopen(req)
 		except urllib2.URLError as e:
-			# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30017))
 			xbmc.log(str(e))
 			return
 
@@ -85,19 +84,14 @@ class GDrive:
 		response.close()
 
 		# retrieve authorization token
-		for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?' + '\"refresh_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
-			accessToken, refreshToken = r.groups()
-			self.authorization.setToken("auth_access_token", accessToken)
-			self.authorization.setToken("auth_refresh_token", refreshToken)
-			self.updateAuthorization()
-			# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30142))
+		accessToken, refreshToken = re.findall('access_token": "(.*?)".*refresh_token": "(.*?)"', responseData, re.DOTALL)[0]
+		self.authorization.setToken("auth_access_token", accessToken)
+		self.authorization.setToken("auth_refresh_token", refreshToken)
+		self.updateAuthorization()
+		errorMessage = re.findall('"error_description": "(.*)"', responseData)
 
-		for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):
-			errorMessage = r.group(1)
-			# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30119) + errorMessage)
-			xbmc.log(errorMessage)
-
-		return
+		if errorMessage:
+			xbmc.log(errorMessage[0])
 
 	##
 	# refresh OAUTH2 access given refresh token
@@ -119,7 +113,6 @@ class GDrive:
 		try:
 			response = urllib2.urlopen(req)
 		except urllib2.URLError as e:
-			# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30017))
 			self.failed = True
 			xbmc.log(str(e))
 			return
@@ -128,17 +121,13 @@ class GDrive:
 		response.close()
 
 		# retrieve authorization token
-		for r in re.finditer('\"access_token\"\s?\:\s?\"([^\"]+)\".+?', responseData, re.DOTALL):
-			accessToken = r.group(1)
-			self.authorization.setToken("auth_access_token", accessToken)
-			self.updateAuthorization()
+		accessToken = re.findall('"access_token": "(.*?)"', responseData)[0]
+		self.authorization.setToken("auth_access_token", accessToken)
+		self.updateAuthorization()
+		errorMessage = re.findall('"error_description": "(.*)"', responseData)
 
-		for r in re.finditer('\"error_description\"\s?\:\s?\"([^\"]+)\"', responseData, re.DOTALL):
-			errorMessage = r.group(1)
-			# xbmcgui.Dialog().ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30119) + errorMessage)
-			xbmc.log(errorMessage)
-
-		return
+		if errorMessage:
+			xbmc.log(errorMessage[0])
 
 	##
 	# return the appropriate "headers" for Google Drive requests that include 1) user agent, 2) authorization token
