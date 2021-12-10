@@ -26,8 +26,6 @@ import xbmc
 import xbmcgui
 from resources.lib import authorization
 
-SERVICE_NAME = "dmdgdrive"
-
 #
 # Google Drive API 2 implementation of Google Drive
 #
