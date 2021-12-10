@@ -43,6 +43,7 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 		self.PLUGIN_HANDLE = PLUGIN_HANDLE
 		self.PLUGIN_NAME = PLUGIN_NAME
 		self.PLUGIN_URL = PLUGIN_URL
+
 		self.settings = settings
 		self.userAgent = self.settings.getSetting("user_agent")
 		self.close = False
@@ -245,6 +246,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 						fallbackAccounts.remove(fallbackAccount)
 						self.server.settings.setSetting("default_account", fallbackAccount)
 						self.server.settings.setSetting("default_account_ui", username)
+
 						accountChange = True
 						xbmcgui.Dialog().notification(
 							self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),

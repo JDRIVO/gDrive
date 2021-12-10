@@ -51,7 +51,7 @@ class GDrive:
 		self.failed = False
 
 		# load the OAUTH2 tokens or force fetch if not set
-		if authenticate == True and (
+		if authenticate and (
 			not self.authorization.loadToken(self.instanceName, self.settings, "auth_access_token")
 			or not self.authorization.loadToken(self.instanceName, self.settings, "auth_refresh_token")
 		):
