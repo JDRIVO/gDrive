@@ -231,11 +231,12 @@ class MyStreamer(BaseHTTPRequestHandler):
 						if self.server.service.failed:
 							continue
 
+						req = urllib2.Request(url, None, self.server.service.getHeadersList())
+						req.get_method = lambda: "HEAD"
+
 						try:
-							req = urllib2.Request(url, None, self.server.service.getHeadersList())
-							req.get_method = lambda: "HEAD"
 							response = urllib2.urlopen(req)
-						except:
+						except urllib2.URLError as e:
 							continue
 
 						if not defaultAccount in fallbackAccounts:
