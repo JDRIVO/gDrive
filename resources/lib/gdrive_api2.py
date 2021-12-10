@@ -67,6 +67,7 @@ class GDrive:
 		clientID = self.getInstanceSetting("client_id")
 		clientSecret = self.getInstanceSetting("client_secret")
 		header = {"User-Agent": self.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
+
 		data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
 			code, clientID, clientSecret
 		)
@@ -103,6 +104,7 @@ class GDrive:
 		clientID = self.getInstanceSetting("client_id")
 		clientSecret = self.getInstanceSetting("client_secret")
 		header = {"User-Agent": self.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
+
 		data = "client_id={}&client_secret={}&refresh_token={}&grant_type=refresh_token".format(
 			clientID, clientSecret, self.authorization.getToken("auth_refresh_token")
 		)
