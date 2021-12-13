@@ -1,4 +1,4 @@
-page1 = b"""
+form1 = """
 <html>
 	<head>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,9 +7,11 @@ page1 = b"""
 			position: absolute;
 			top: 50%;
 			left: 50%;
-			-moz-transform: translateX(-50%) translateY(-50%);
-			-webkit-transform: translateX(-50%) translateY(-50%);
-			transform: translateX(-50%) translateY(-50%);
+			transform: translate(-50%, -50%);
+			-moz-transform: translate(-50%, -50%);
+			-ms-transform: translate(-50%, -50%);
+			-o-transform: translate(-50%, -50%);
+			-webkit-transform: translate(-50%, -50%);
 			background-color: 080808;
 			border: 1px solid black;
 			height: 200px;
@@ -21,9 +23,11 @@ page1 = b"""
 			position: absolute;
 			top: 50%;
 			left: 50%;
-			-moz-transform: translateX(-50%) translateY(-50%);
-			-webkit-transform: translateX(-50%) translateY(-50%);
-			transform: translateX(-50%) translateY(-50%);
+			transform: translate(-50%, -50%);
+			-moz-transform: translate(-50%, -50%);
+			-ms-transform: translate(-50%, -50%);
+			-o-transform: translate(-50%, -50%);
+			-webkit-transform: translate(-50%, -50%);
 			}
 			.input {
 			width: 200px;
@@ -61,7 +65,7 @@ page1 = b"""
 </html>"""
 
 
-def page2(clientID, clientSecret):
+def form2(clientID, clientSecret):
 	return """
 <html>
 	<head>
@@ -75,9 +79,11 @@ def page2(clientID, clientSecret):
 			position: absolute;
 			top: 50%%;
 			left: 50%%;
-			-moz-transform: translateX(-50%%) translateY(-50%%);
-			-webkit-transform: translateX(-50%%) translateY(-50%%);
-			transform: translateX(-50%%) translateY(-50%%);
+			transform: translate(-50%%, -50%%);
+			-moz-transform: translate(-50%%, -50%%);
+			-ms-transform: translate(-50%%, -50%%);
+			-o-transform: translate(-50%%, -50%%);
+			-webkit-transform: translate(-50%%, -50%%);
 			background-color: 080808;
 			border: 1px solid black;
 			height: 200px;
@@ -89,9 +95,11 @@ def page2(clientID, clientSecret):
 			position: absolute;
 			top: 50%%;
 			left: 50%%;
-			-moz-transform: translateX(-50%%) translateY(-50%%);
-			-webkit-transform: translateX(-50%%) translateY(-50%%);
-			transform: translateX(-50%%) translateY(-50%%);
+			transform: translate(-50%%, -50%%);
+			-moz-transform: translate(-50%%, -50%%);
+			-ms-transform: translate(-50%%, -50%%);
+			-o-transform: translate(-50%%, -50%%);
+			-webkit-transform: translate(-50%%, -50%%);
 			display: none;
 			}
 			.input {
@@ -103,6 +111,8 @@ def page2(clientID, clientSecret):
 			.button1 {
 			height: 100%%;
 			width: 100%%;
+			font-family:arial;
+			font-size:13px;
 			color: white;
 			border: none;
 			cursor: pointer;
@@ -124,7 +134,7 @@ def page2(clientID, clientSecret):
 	</head>
 	<body>
 		<div class="container">
-			<button class="button button1" id="google" onclick="myFunction()" >
+			<button class="button button1" id="google" onclick="myFunction()">
 			Click to get your code then fill the next form
 			</button>
 			<form action="/enroll" method="post">
@@ -155,3 +165,54 @@ def page2(clientID, clientSecret):
 	clientSecret,
 	clientID,
 )
+
+def status(output):
+	return """
+<html>
+	<head>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<style>
+			.container {
+			position: absolute;
+			top: 50%%;
+			left: 50%%;
+			transform: translate(-50%%, -50%%);
+			-moz-transform: translate(-50%%, -50%%);
+			-ms-transform: translate(-50%%, -50%%);
+			-o-transform: translate(-50%%, -50%%);
+			-webkit-transform: translate(-50%%, -50%%);
+			background-color: 080808;
+			border: 1px solid black;
+			height: 200px;
+			width: 300px;
+			background-color: #0F0F0F;
+			box-shadow: 5px 10px;
+			}
+			.inner {
+			position: absolute;
+			top: 50%%;
+			left: 50%%;
+			transform: translate(-50%%, -50%%);
+			-moz-transform: translate(-50%%, -50%%);
+			-ms-transform: translate(-50%%, -50%%);
+			-o-transform: translate(-50%%, -50%%);
+			-webkit-transform: translate(-50%%, -50%%);
+			white-space: nowrap;
+			overflow: hidden;
+			}
+			body {
+			background-color: #080808;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<form action="/enroll?default=false" method="post">
+				<div class="inner">
+					<p style="color:white; font-family:arial; font-size:13px;">%s</p>
+				</div>
+			</form>
+		</div>
+	</body>
+</html>
+""" % (output)

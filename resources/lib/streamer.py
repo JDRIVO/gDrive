@@ -39,11 +39,8 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 	def __init__(self, *args, **kwargs):
 		HTTPServer.__init__(self, *args, **kwargs)
 
-	def setDetails(self, PLUGIN_HANDLE, PLUGIN_NAME, PLUGIN_URL, settings):
-		self.PLUGIN_HANDLE = PLUGIN_HANDLE
-		self.PLUGIN_NAME = PLUGIN_NAME
-		self.PLUGIN_URL = PLUGIN_URL
-
+	def setDetails(self, pluginName, settings):
+		self.pluginName = pluginName
 		self.settings = settings
 		self.userAgent = self.settings.getSetting("user_agent")
 		self.close = False
@@ -80,8 +77,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 			instanceName, url = re.findall("instance=(.*)&url=(.*)", postData)[0]
 			xbmc.log("url = " + url + "\n")
 			self.server.service = constants.cloudservice2(
-				self.server.PLUGIN_HANDLE,
-				self.server.PLUGIN_URL,
 				self.server.settings,
 				instanceName,
 				self.server.userAgent,
@@ -109,7 +104,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.end_headers()
 
 			clientID, clientSecret = re.findall("client_id=(.*)&client_secret=(.*)", postData)[0]
-			data = enrolment.page2(clientID, clientSecret)
+			data = enrolment.form2(clientID, clientSecret)
 			self.wfile.write(data.encode("utf-8"))
 
 		# redirect url to output
@@ -132,18 +127,23 @@ class MyStreamer(BaseHTTPRequestHandler):
 			try:
 				response = urllib2.urlopen(req)
 			except urllib2.URLError as e:
-				self.send_response(200)
-				self.end_headers()
-				self.wfile.write(str(e).encode("utf-8"))
+				data = enrolment.status(e)
+				self.wfile.write(data.encode("utf-8"))
 				return
 
 			responseData = response.read().decode("utf-8")
 			response.close()
+			error = re.findall('"error_description": "(.*?)"', responseData)
+
+			if error:
+				data = enrolment.status(error[0])
+				self.wfile.write(data.encode("utf-8"))
+				return
 
 			accountNumber = 1
 
 			while True:
-				instanceName = self.server.PLUGIN_NAME + str(accountNumber)
+				instanceName = self.server.pluginName + str(accountNumber)
 
 				try:
 					username = self.server.settings.getSetting(instanceName + "_username")
@@ -167,15 +167,11 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 				accountNumber += 1
 
-			# retrieve authorization token
 			accessToken, refreshToken = re.findall('access_token": "(.*?)".*refresh_token": "(.*?)"', responseData, re.DOTALL)[0]
 			self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
 			self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
-			self.wfile.write(b"Successfully enrolled account.")
-			errorMessage = re.findall('"error_description": "(.*)"', responseData)
-
-			if errorMessage:
-				self.wfile.write(errorMessage[0].encode("utf-8"))
+			data = enrolment.status("Successfully enrolled account")
+			self.wfile.write(data.encode("utf-8"))
 
 	def do_HEAD(self):
 
@@ -189,18 +185,17 @@ class MyStreamer(BaseHTTPRequestHandler):
 			try:
 				response = urllib2.urlopen(req)
 			except urllib2.URLError as e:
+				self.server.failed = True
 
 				if e.code == 404:
 					xbmcgui.Dialog().ok(self.server.settings.getLocalizedString(30003), self.server.settings.getLocalizedString(30209))
 					return
 
 				elif e.code == 401:
-					xbmc.log("ERROR\n" + self.server.service.getHeadersEncoded())
 					xbmcgui.Dialog().ok(self.server.settings.getLocalizedString(30003), self.server.settings.getLocalizedString(30018))
 					return
 
 				elif e.code == 403 or e.code == 429:
-					xbmc.log("ERROR\n" + self.server.service.getHeadersEncoded())
 
 					if not self.server.settings.getSetting("fallback"):
 						xbmcgui.Dialog().ok(
@@ -221,8 +216,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 							continue
 
 						self.server.service = constants.cloudservice2(
-							self.server.PLUGIN_HANDLE,
-							self.server.PLUGIN_URL,
 							self.server.settings,
 							"gdrive" + fallbackAccount,
 							self.server.userAgent,
@@ -271,8 +264,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 						return
 
 				else:
+					xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
 					return
 
+			self.server.failed = False
 			self.send_response(200)
 			self.send_header("Content-Type", response.info().get("Content-Type"))
 			self.send_header("Content-Length", response.info().get("Content-Length"))
@@ -286,7 +281,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 			## may want to add more granular control over chunk fetches
 			# self.wfile.write(response.read())
-
 			response.close()
 			xbmc.log("DONE")
 			self.server.length = response.info().get("Content-Length")
@@ -296,6 +290,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 		# redirect url to output
 		if self.path == "/play":
+
+			if self.server.failed:
+				return
+
 			start, end = re.findall("Range: bytes=([\d]+)-([\d]+)?", str(self.headers), re.DOTALL)[0]
 			if start: start = int(start)
 			if end: end = int(end)
@@ -328,20 +326,8 @@ class MyStreamer(BaseHTTPRequestHandler):
 			try:
 				response = urllib2.urlopen(req)
 			except urllib2.URLError as e:
-
-				if e.code == 403 or e.code == 401:
-					xbmc.log("ERROR\n" + self.server.service.getHeadersEncoded())
-					self.server.service.refreshToken()
-					req = urllib2.Request(url, None, self.server.service.getHeadersList())
-
-					try:
-						response = urllib2.urlopen(req)
-					except:
-						xbmc.log("STILL ERROR\n" + self.server.service.getHeadersEncoded())
-						return
-
-				else:
-					return
+				xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
+				return
 
 			if not start:
 				self.send_response(200)
@@ -377,7 +363,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 			try:
 				decrypt.decryptStreamChunkOld(response, self.wfile, startOffset=startOffset)
 			except Exception as e:
-				xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
+				xbmc.log(str(e))
 
 			response.close()
 
@@ -385,4 +371,5 @@ class MyStreamer(BaseHTTPRequestHandler):
 		elif self.path == "/enroll":
 			self.send_response(200)
 			self.end_headers()
-			self.wfile.write(enrolment.page1)
+			data = enrolment.form1
+			self.wfile.write(data.encode("utf-8"))

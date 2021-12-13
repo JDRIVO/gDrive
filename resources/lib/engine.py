@@ -84,7 +84,7 @@ class AccountActions:
 
 	@staticmethod
 	def validateAccount(instanceName, userAgent):
-		validation = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
+		validation = CLOUD_SERVICE(SETTINGS, instanceName, userAgent)
 		validation.refreshToken()
 
 		if not validation.failed:
@@ -400,7 +400,7 @@ class ContentEngine:
 				return
 
 			instanceName = PLUGIN_NAME + defaultAccount
-			service = CLOUD_SERVICE(PLUGIN_HANDLE, PLUGIN_URL, SETTINGS, instanceName, userAgent)
+			service = CLOUD_SERVICE(SETTINGS, instanceName, userAgent)
 
 			if (not dbID or not dbType) and not filePath:
 				timeEnd = time.time() + 1
@@ -533,7 +533,7 @@ class ContentEngine:
 				response = urllib2.urlopen(req)
 				response.close()
 			except urllib2.URLError as e:
-				xbmc.log(SETTINGS.getAddonInfo("name") + ": " + str(e), xbmc.LOGERROR)
+				xbmc.log(SETTINGS.getLocalizedString(30003) + ": " + str(e))
 				return
 
 			item = xbmcgui.ListItem(path="http://localhost:{}/play".format(serverPort))
