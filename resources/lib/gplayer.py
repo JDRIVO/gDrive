@@ -1,5 +1,6 @@
-import xbmc
 from threading import Thread
+
+import xbmc
 
 
 class GPlayer(xbmc.Player):

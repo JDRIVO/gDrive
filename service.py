@@ -1,18 +1,23 @@
-import xbmc
-import server
-import watcher
 from threading import Thread
 
+import xbmc
+
+from resources.lib import streamer, watcher
+
 if __name__ == "__main__":
-	t = Thread(target=server.run)
-	t.setDaemon(True)
-	t.start()
-	t = Thread(target=watcher.run)
-	t.setDaemon(True)
-	t.start()
 	monitor = xbmc.Monitor()
+	watcher = watcher.LibraryMonitor()
+	server = streamer.MyHTTPServer()
+
+	t = Thread(target=server.serve_forever)
+	t.setDaemon(True)
+	t.start()
 
 	while not monitor.abortRequested():
 
 		if monitor.waitForAbort(1):
 			break
+
+	server.server_close()
+	server.socket.close()
+	server.shutdown()

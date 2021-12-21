@@ -1,5 +1,6 @@
 import os
 import sys
+
 import encryption
 
 saltFile = sys.argv[1]

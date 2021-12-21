@@ -21,13 +21,14 @@ import re
 import time
 import urllib
 import urllib2
-import xbmc
-import xbmcgui
-import constants
 from threading import Thread
 from SocketServer import ThreadingMixIn
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from resources.lib import encryption, enrolment, gplayer
+
+import xbmc
+import xbmcgui
+
+from . import account_manager, encryption, enrolment, gdrive_api, gplayer, settings
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -37,22 +38,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class MyHTTPServer(ThreadingMixIn, HTTPServer):
 
 	def __init__(self, *args, **kwargs):
-		HTTPServer.__init__(self, *args, **kwargs)
+		self.settings = settings.Settings()
+		port = self.settings.getSettingInt("server_port", 8011)
+		HTTPServer.__init__(self, ("", port), MyStreamer)
 
-	def setDetails(self, pluginName, settings):
-		self.pluginName = pluginName
-		self.settings = settings
 		self.userAgent = self.settings.getSetting("user_agent")
-		self.close = False
-
-	def run(self):
-
-		try:
-			self.serve_forever()
-		except:
-			self.close = True
-			# Clean-up server (close socket, etc.)
-			self.server_close()
+		self.accountManager = account_manager.AccountManager(self.settings)
+		self.service = gdrive_api.GoogleDrive(self.settings, self.accountManager, self.userAgent)
 
 	def startGPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
@@ -66,24 +58,20 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 
 			xbmc.sleep(1000)
 
+
 class MyStreamer(BaseHTTPRequestHandler):
 
-	# Handler for the GET requests
 	def do_POST(self):
 
 		if self.path == "/crypto_playurl":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
-			instanceName, url = re.findall("instance=(.*)&url=(.*)", postData)[0]
-			xbmc.log("url = " + url + "\n")
-			self.server.service = constants.cloudservice2(
-				self.server.settings,
-				instanceName,
-				self.server.userAgent,
-			)
+			accountNumber, url = re.findall("account=(.*)&url=(.*)", postData)[0]
+			self.server.accountManager.loadAccounts()
+			self.server.service.setAccount(self.server.accountManager.accounts[accountNumber])
 
-			self.server.playbackURL = url
 			self.server.service.refreshToken()
+			self.server.playbackURL = url
 			self.send_response(200)
 			self.end_headers()
 
@@ -96,7 +84,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 			dbID, dbType, widget, trackProgress = re.findall("dbid=([\d]+)&dbtype=(.*)&widget=(\d)&track=(\d)", postData)[0]
 			Thread(target=self.server.startGPlayer, args=(dbID, dbType, widget, trackProgress)).start()
 
-		# redirect url to output
 		elif self.path == "/enroll?default=false":
 			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8")  # <--- Gets the data itself
@@ -107,79 +94,44 @@ class MyStreamer(BaseHTTPRequestHandler):
 			data = enrolment.form2(clientID, clientSecret)
 			self.wfile.write(data.encode("utf-8"))
 
-		# redirect url to output
 		elif self.path == "/enroll":
 			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8")  # <--- Gets the data itself
 			postData = urllib.unquote_plus(postData)
 			self.send_response(200)
+
 			self.end_headers()
+			accountName, code, clientID, clientSecret = re.findall("account=(.*)&code=(.*)&client_id=(.*)&client_secret=(.*)", postData)[0]
+			refreshToken = self.server.service.getToken(code, clientID, clientSecret)
 
-			account, code, clientID, clientSecret = re.findall("account=(.*)&code=(.*)&client_id=(.*)&client_secret=(.*)", postData)[0]
-			url = "https://accounts.google.com/o/oauth2/token"
-			header = {"User-Agent": self.server.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
-			data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
-				code, clientID, clientSecret
+			if "failed" in refreshToken:
+				data = enrolment.status(refreshToken[1])
+				self.wfile.write(data.encode("utf-8"))
+				return
+
+			self.server.accountManager.loadAccounts()
+			accountNumber = self.server.accountManager.addAccount(
+				{
+					"username": accountName,
+					"code": code,
+					"client_id": clientID,
+					"client_secret": clientSecret,
+					"refresh_token": refreshToken,
+				}
 			)
-			req = urllib2.Request(url, data.encode("utf-8"), header)
+			defaultAccountName, defaultAccountNumber = self.server.accountManager.getDefaultAccount()
 
-			# try login
-			try:
-				response = urllib2.urlopen(req)
-			except urllib2.URLError as e:
-				data = enrolment.status(e)
-				self.wfile.write(data.encode("utf-8"))
-				return
+			if not defaultAccountName:
+				self.server.accountManager.setDefaultAccount(accountName, accountNumber)
 
-			responseData = response.read().decode("utf-8")
-			response.close()
-			error = re.findall('"error_description": "(.*?)"', responseData)
-
-			if error:
-				data = enrolment.status(error[0])
-				self.wfile.write(data.encode("utf-8"))
-				return
-
-			accountNumber = 1
-
-			while True:
-				instanceName = self.server.pluginName + str(accountNumber)
-
-				try:
-					username = self.server.settings.getSetting(instanceName + "_username")
-				except:
-					username = False
-
-				if not username or username == account:
-					self.server.settings.setSetting(instanceName + "_username", account)
-					self.server.settings.setSetting(instanceName + "_code", code)
-					self.server.settings.setSetting(instanceName + "_client_id", clientID)
-					self.server.settings.setSetting(instanceName + "_client_secret", clientSecret)
-
-					if not self.server.settings.getSetting("default_account"):
-						self.server.settings.setSetting("default_account", str(accountNumber))
-						self.server.settings.setSetting("default_account_ui", account)
-
-					if accountNumber > self.server.settings.getSettingInt("account_amount"):
-						self.server.settings.setSettingInt("account_amount", accountNumber)
-
-					break
-
-				accountNumber += 1
-
-			accessToken, refreshToken = re.findall('access_token": "(.*?)".*refresh_token": "(.*?)"', responseData, re.DOTALL)[0]
-			self.server.settings.setSetting(instanceName + "_auth_access_token", accessToken)
-			self.server.settings.setSetting(instanceName + "_auth_refresh_token", refreshToken)
 			data = enrolment.status("Successfully enrolled account")
 			self.wfile.write(data.encode("utf-8"))
 
 	def do_HEAD(self):
 
-		# redirect url to output
 		if self.path == "/play":
 			url = self.server.playbackURL
-			xbmc.log("HEAD " + url + "\n")
-			req = urllib2.Request(url, None, self.server.service.getHeadersList())
+			req = urllib2.Request(url, headers=self.server.service.getHeaders())
 			req.get_method = lambda: "HEAD"
 
 			try:
@@ -204,28 +156,18 @@ class MyStreamer(BaseHTTPRequestHandler):
 						)
 						return
 
-					fallbackAccounts = self.server.settings.getSetting("fallback_accounts").split(",")
-					defaultAccount = self.server.settings.getSetting("default_account")
+					fallbackAccountNames, fallbackAccountNumbers = self.server.accountManager.getFallbackAccounts()
+					defaultAccountName, defaultAccountNumber = self.server.accountManager.getDefaultAccount()
 					accountChange = False
 
-					for fallbackAccount in fallbackAccounts:
-						username = self.server.settings.getSetting("gdrive{}_username".format(fallbackAccount))
+					for fallbackAccountName, fallbackAccountNumber in list(zip(fallbackAccountNames, fallbackAccountNumbers)):
+						self.server.service.setAccount(self.server.accountManager.accounts[fallbackAccountNumber])
+						refreshToken = self.server.service.refreshToken()
 
-						if not username:
-							fallbackAccounts.remove(fallbackAccount)
+						if refreshToken == "failed":
 							continue
 
-						self.server.service = constants.cloudservice2(
-							self.server.settings,
-							"gdrive" + fallbackAccount,
-							self.server.userAgent,
-						)
-						self.server.service.refreshToken()
-
-						if self.server.service.failed:
-							continue
-
-						req = urllib2.Request(url, None, self.server.service.getHeadersList())
+						req = urllib2.Request(url, headers=self.server.service.getHeaders())
 						req.get_method = lambda: "HEAD"
 
 						try:
@@ -233,28 +175,22 @@ class MyStreamer(BaseHTTPRequestHandler):
 						except urllib2.URLError as e:
 							continue
 
-						if not defaultAccount in fallbackAccounts:
-							fallbackAccounts.append(defaultAccount)
+						if not defaultAccountNumber in fallbackAccountNumbers:
+							fallbackAccountNames.append(defaultAccountName)
+							fallbackAccountNumbers.append(defaultAccountNumber)
 
-						fallbackAccounts.remove(fallbackAccount)
-						self.server.settings.setSetting("default_account", fallbackAccount)
-						self.server.settings.setSetting("default_account_ui", username)
+						fallbackAccountNames.remove(fallbackAccountName)
+						fallbackAccountNumbers.remove(fallbackAccountNumber)
+						self.server.accountManager.setDefaultAccount(fallbackAccountName, fallbackAccountNumber)
 
-						accountChange = True
 						xbmcgui.Dialog().notification(
 							self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),
 							self.server.settings.getLocalizedString(30007),
 						)
+						accountChange = True
 						break
 
-					self.server.settings.setSetting("fallback_accounts", ",".join(fallbackAccounts))
-					self.server.settings.setSetting(
-						"fallback_accounts_ui",
-						", ".join(
-							self.server.settings.getSetting("gdrive{}_username".format(n))
-							for n in fallbackAccounts
-						)
-					)
+					self.server.accountManager.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
 
 					if not accountChange:
 						xbmcgui.Dialog().ok(
@@ -264,11 +200,12 @@ class MyStreamer(BaseHTTPRequestHandler):
 						return
 
 				else:
-					xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
+					xbmc.log("gdrive error: " + str(e))
 					return
 
 			self.server.failed = False
 			self.send_response(200)
+
 			self.send_header("Content-Type", response.info().get("Content-Type"))
 			self.send_header("Content-Length", response.info().get("Content-Length"))
 			self.send_header("Cache-Control", response.info().get("Cache-Control"))
@@ -277,24 +214,21 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_header("Accept-Ranges", "bytes")
 			# self.send_header("ETag", response.info().get("ETag"))
 			# self.send_header("Server", response.info().get("Server"))
-			self.end_headers()
 
-			## may want to add more granular control over chunk fetches
+			self.end_headers()
+			# may want to add more granular control over chunk fetches
 			# self.wfile.write(response.read())
 			response.close()
-			xbmc.log("DONE")
 			self.server.length = response.info().get("Content-Length")
 
-	# Handler for the GET requests
 	def do_GET(self):
 
-		# redirect url to output
 		if self.path == "/play":
 
 			if self.server.failed:
 				return
 
-			start, end = re.findall("Range: bytes=([\d]+)-([\d]+)?", str(self.headers), re.DOTALL)[0]
+			start, end = re.findall("Range:[\s]*bytes=([\d]+)-([\d]*)", str(self.headers), re.DOTALL)[0]
 			if start: start = int(start)
 			if end: end = int(end)
 			startOffset = 0
@@ -312,12 +246,11 @@ class MyStreamer(BaseHTTPRequestHandler):
 			xbmc.log("GET " + url + "\n" + self.server.service.getHeadersEncoded() + "\n")
 
 			if not start:
-				req = urllib2.Request(url, None, self.server.service.getHeadersList())
+				req = urllib2.Request(url, headers=self.server.service.getHeaders())
 			else:
 				req = urllib2.Request(
 					url,
-					None,
-					self.server.service.getHeadersList(
+					headers=self.server.service.getHeaders(
 						additionalHeader="Range",
 						additionalValue="bytes=" + str(start - startOffset) + "-" + str(end),
 					)
@@ -326,7 +259,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 			try:
 				response = urllib2.urlopen(req)
 			except urllib2.URLError as e:
-				xbmc.log(self.server.settings.getLocalizedString(30003) + ": " + str(e))
+				xbmc.log("gdrive error: " + str(e))
 				return
 
 			if not start:
@@ -353,11 +286,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_header("Date", response.info().get("Date"))
 			self.send_header("Content-type", "video/mp4")
 			self.send_header("Accept-Ranges", "bytes")
-			self.end_headers()
 
+			self.end_headers()
 			# may want to add more granular control over chunk fetches
 			# self.wfile.write(response.read())
-
 			decrypt = encryption.Encryption(self.server.settings.getSetting("crypto_salt"), self.server.settings.getSetting("crypto_password"))
 
 			try:
@@ -367,7 +299,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 			response.close()
 
-		# redirect url to output
 		elif self.path == "/enroll":
 			self.send_response(200)
 			self.end_headers()

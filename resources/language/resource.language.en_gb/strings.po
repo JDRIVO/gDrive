@@ -29,6 +29,10 @@ msgctxt "#30003"
 msgid "gDrive error"
 msgstr "gDrive error"
 
+msgctxt "#30005"
+msgid "Please set a default playback account in the gDrive settings."
+msgstr "Please set a default playback account in the gDrive settings."
+
 msgctxt "#30006"
 msgid "API Ban"
 msgstr "API Ban"
@@ -40,22 +44,6 @@ msgstr "Switching to fallback account"
 msgctxt "#30009"
 msgid "Daily quota limit exceeded. Ban will lift within 24 hours."
 msgstr "Daily quota limit exceeded. Ban will lift within 24 hours."
-
-msgctxt "#30005"
-msgid "Please set a default playback account in the gDrive settings."
-msgstr "Please set a default playback account in the gDrive settings."
-
-msgctxt "#30015"
-msgid "Set the Username and Password in addon settings before running."
-msgstr "Set the Username and Password in addon settings before running."
-
-msgctxt "#30016"
-msgid "You must add org.python.pydev.debug.pysrc to your PYTHONPATH."
-msgstr "You must add org.python.pydev.debug.pysrc to your PYTHONPATH."
-
-msgctxt "#30017"
-msgid "Login information is incorrect or permission is denied."
-msgstr "Login information is incorrect or permission is denied."
 
 msgctxt "#30018"
 msgid "The default playback accounts credentials are no longer valid. Consider deleting this account."
@@ -84,6 +72,30 @@ msgstr "Validate account"
 msgctxt "#30024"
 msgid "Account Validation"
 msgstr "Account Validation"
+
+msgctxt "#30025"
+msgid "Account name:"
+msgstr "Account name:"
+
+msgctxt "#30026"
+msgid "Google Service Account Key (JSON) File"
+msgstr "Google Service Account Key (JSON) File"
+
+msgctxt "#30027"
+msgid "A JSON file must be selected."
+msgstr "A JSON file must be selected."
+
+msgctxt "#30028"
+msgid "The private key and client email weren't found in your key file."
+msgstr "The private key and client email weren't found in your key file."
+
+msgctxt "#30029"
+msgid "The client email wasn't found in your key file."
+msgstr "The client email wasn't found in your key file."
+
+msgctxt "#30030"
+msgid "The private key wasn't found in your key file."
+msgstr "The private key wasn't found in your key file."
 
 msgctxt "#30118"
 msgid "The following account was enrolled:"
@@ -148,6 +160,10 @@ msgstr "Remove from fallback"
 msgctxt "#30213"
 msgid "Add to fallback"
 msgstr "Add to fallback"
+
+msgctxt "#30214"
+msgid "Add service account"
+msgstr "Add service account"
 
 msgctxt "#30218"
 msgid "in a web browser. Click OK after completing the process."
@@ -214,8 +230,8 @@ msgid "Subtitle Structure:"
 msgstr "Subtitle Structure:"
 
 msgctxt "#30405"
-msgid "Enable Media Flag Background Service (Requires Restart)"
-msgstr "Enable Media Flag Background Service (Requires Restart)"
+msgid "Enable Media Flag Background Service"
+msgstr "Enable Media Flag Background Service"
 
 msgctxt "#30406"
 msgid "Video Database File:"

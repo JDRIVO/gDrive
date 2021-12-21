@@ -17,8 +17,9 @@
 
 """
 
-import sys
 import cgi
+import sys
+
 from xbmcaddon import Addon
 
 
@@ -36,7 +37,7 @@ class Settings(Addon):
 		queries = {}
 
 		try:
-			queries = queries = cgi.parse_qs(query)
+			queries = cgi.parse_qs(query)
 		except:
 			return
 
