@@ -41,11 +41,10 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 		self.settings = settings.Settings()
 		port = self.settings.getSettingInt("server_port", 8011)
 		HTTPServer.__init__(self, ("", port), MyStreamer)
-		self.monitor = xbmc.Monitor()
 
-		self.userAgent = self.settings.getSetting("user_agent")
+		self.monitor = xbmc.Monitor()
 		self.accountManager = account_manager.AccountManager(self.settings)
-		self.service = gdrive_api.GoogleDrive(self.settings, self.accountManager, self.userAgent)
+		self.service = gdrive_api.GoogleDrive(self.settings, self.accountManager)
 
 	def startGPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
