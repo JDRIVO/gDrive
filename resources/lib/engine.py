@@ -18,11 +18,9 @@ class ContentEngine:
 	def __init__(self):
 		self.pluginHandle = int(sys.argv[1])
 		self.settings = settings.Settings()
-		self.userAgent = self.settings.getSetting("user_agent")
-
 		self.accountManager = account_manager.AccountManager(self.settings)
 		self.accounts = self.accountManager.accounts
-		self.cloudService = gdrive_api.GoogleDrive(self.settings, self.accountManager, self.userAgent)
+		self.cloudService = gdrive_api.GoogleDrive(self.settings, self.accountManager)
 
 	def run(self, dbID, dbType, filePath):
 		mode = self.settings.getParameter("mode", "main").lower()

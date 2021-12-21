@@ -230,8 +230,8 @@ msgid "Subtitle Structure:"
 msgstr "Subtitle Structure:"
 
 msgctxt "#30405"
-msgid "Enable Media Flag Background Service"
-msgstr "Enable Media Flag Background Service"
+msgid "Obtain Media Flag Information From STRM"
+msgstr "Obtain Media Flag Information From STRM"
 
 msgctxt "#30406"
 msgid "Video Database File:"

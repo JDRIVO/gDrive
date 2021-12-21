@@ -41,6 +41,7 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 		self.settings = settings.Settings()
 		port = self.settings.getSettingInt("server_port", 8011)
 		HTTPServer.__init__(self, ("", port), MyStreamer)
+		self.monitor = xbmc.Monitor()
 
 		self.userAgent = self.settings.getSetting("user_agent")
 		self.accountManager = account_manager.AccountManager(self.settings)
@@ -50,13 +51,14 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 		lastUpdate = time.time()
 		player = gplayer.GPlayer(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
 
-		while not player.close and not self.close:
+		while not self.monitor.abortRequested() and not player.close:
 
 			if time.time() - lastUpdate >= 1740:
 				lastUpdate = time.time()
 				self.service.refreshToken()
 
-			xbmc.sleep(1000)
+			if self.monitor.waitForAbort(1):
+				break
 
 
 class MyStreamer(BaseHTTPRequestHandler):

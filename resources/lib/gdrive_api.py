@@ -15,10 +15,10 @@ GDRIVE_PARAMS = "?supportsAllDrives=true&alt=media"
 
 class GoogleDrive:
 
-	def __init__(self, settings, accountManager, userAgent):
+	def __init__(self, settings, accountManager):
 		self.settings = settings
 		self.accountManager = accountManager
-		self.userAgent = userAgent
+		self.userAgent = self.settings.getSetting("user_agent")
 
 	def setAccount(self, account):
 		self.account = account
