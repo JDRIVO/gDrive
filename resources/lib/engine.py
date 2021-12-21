@@ -10,17 +10,18 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
-from . import account_manager, gdrive_api, settings
+import constants
+from . import account_manager, gdrive_api
 
 
 class ContentEngine:
 
 	def __init__(self):
 		self.pluginHandle = int(sys.argv[1])
-		self.settings = settings.Settings()
+		self.settings = constants.settings
 		self.accountManager = account_manager.AccountManager(self.settings)
 		self.accounts = self.accountManager.accounts
-		self.cloudService = gdrive_api.GoogleDrive(self.settings, self.accountManager)
+		self.cloudService = gdrive_api.GoogleDrive(self.settings.getSetting("user_agent"))
 
 	def run(self, dbID, dbType, filePath):
 		mode = self.settings.getParameter("mode", "main").lower()
@@ -484,7 +485,7 @@ class ContentEngine:
 			else:
 				resumeOption = True
 
-		driveURL = self.cloudService.constructDriveURL()
+		driveURL = self.cloudService.constructDriveURL(self.settings.getParameter("filename"))
 		serverPort = self.settings.getSettingInt("server_port", 8011)
 		url = "http://localhost:{}/crypto_playurl".format(serverPort)
 		data = "account={}&url={}".format(defaultAccount, driveURL)

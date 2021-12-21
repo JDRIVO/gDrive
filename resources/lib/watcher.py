@@ -4,13 +4,13 @@ from sqlite3 import dbapi2 as sqlite
 
 import xbmc
 
-from resources.lib import settings
+import constants
 
 
 class LibraryMonitor(xbmc.Monitor):
 
 	def __init__(self):
-		self.settings = settings.Settings()
+		self.settings = constants.settings
 		self.getSettings()
 
 	@staticmethod

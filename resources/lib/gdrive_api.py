@@ -15,16 +15,15 @@ GDRIVE_PARAMS = "?supportsAllDrives=true&alt=media"
 
 class GoogleDrive:
 
-	def __init__(self, settings, accountManager):
-		self.settings = settings
-		self.accountManager = accountManager
-		self.userAgent = self.settings.getSetting("user_agent")
+	def __init__(self, userAgent):
+		self.userAgent = userAgent
 
 	def setAccount(self, account):
 		self.account = account
 
-	def constructDriveURL(self):
-		return GDRIVE_URL + self.settings.getParameter("filename") + GDRIVE_PARAMS
+	@staticmethod
+	def constructDriveURL(fileID):
+		return GDRIVE_URL + fileID + GDRIVE_PARAMS
 
 	def getToken(self, code, clientID, clientSecret):
 		header = {"User-Agent": self.userAgent, "Content-Type": "application/x-www-form-urlencoded"}
