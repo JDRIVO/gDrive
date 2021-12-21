@@ -366,7 +366,7 @@ class ContentEngine:
 			self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30208))
 			return
 
-		self.cloudService.account = self.accounts[defaultAccount]
+		self.cloudService.setAccount(self.accounts[defaultAccount])
 
 		if (not dbID or not dbType) and not filePath:
 			timeEnd = time.time() + 1
