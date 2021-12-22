@@ -31,6 +31,7 @@ for dic in ffprobeOutput["streams"]:
 		videoCodec = dic.get("codec_name")
 		videoWidth = dic.get("width")
 		videoHeight = dic.get("height")
+		codecTag = dic.get("codec_tag_string")
 		colourTransfer = dic.get("color_transfer")
 
 		if videoCodec:
@@ -45,12 +46,12 @@ for dic in ffprobeOutput["streams"]:
 		if videoWidth and videoHeight:
 			mediaInfo["aspect_ratio"] = videoWidth / videoHeight
 
-		if colourTransfer in ("smpte2084", "smpte2086"):
+		if codecTag in ("dva1", "dvav", "dvh1", "dvhe"):
+			mediaInfo["hdr"] = "dolbyvision"
+		elif colourTransfer in ("smpte2084", "smpte2086"):
 			mediaInfo["hdr"] = "hdr10"
 		elif colourTransfer == "arib-std-b67":
 			mediaInfo["hdr"] = "hlg"
-		elif dic.get("codec_tag_string") == "dvhe":
-			mediaInfo["hdr"] = "dolbyvision"
 
 	elif codecType == "audio" and not audio:
 		audio = True
