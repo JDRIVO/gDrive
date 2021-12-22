@@ -19,29 +19,58 @@ args.append(videoPath)
 ffprobeOutput = subprocess.check_output(args).decode("utf-8")
 ffprobeOutput = json.loads(ffprobeOutput)
 
+mediaInfo = {}
+mediaInfo["video_duration"] = ffprobeOutput["format"]["duration"]
 video = audio = False
-videoDuration = ffprobeOutput["format"]["duration"]
 
 for dic in ffprobeOutput["streams"]:
-	codecType = dic["codec_type"]
+	codecType = dic.get("codec_type")
 
 	if codecType == "video" and not video:
 		video = True
-		videoCodec = dic["codec_name"]
-		videoWidth = dic["width"]
-		videoHeight = dic["height"]
-		aspectRatio = videoWidth / videoHeight
+		videoCodec = dic.get("codec_name")
+		videoWidth = dic.get("width")
+		videoHeight = dic.get("height")
+		colourTransfer = dic.get("color_transfer")
+
+		if videoCodec:
+			mediaInfo["video_codec"] = videoCodec
+
+		if videoWidth:
+			mediaInfo["video_width"] = videoWidth
+
+		if videoHeight:
+			mediaInfo["video_height"] = videoHeight
+
+		if videoWidth and videoHeight:
+			mediaInfo["aspect_ratio"] = videoWidth / videoHeight
+
+		if colourTransfer in ("smpte2084", "smpte2086"):
+			mediaInfo["hdr"] = "hdr10"
+		elif colourTransfer == "arib-std-b67":
+			mediaInfo["hdr"] = "hlg"
+		elif dic.get("codec_tag_string") == "dvhe":
+			mediaInfo["hdr"] = "dolbyvision"
+
 	elif codecType == "audio" and not audio:
 		audio = True
-		audioCodec = dic["codec_name"]
-		audioChannels = dic["channels"]
+		audioCodec = dic.get("codec_name")
+		audioChannels = dic.get("channels")
+
+		if audioCodec:
+			mediaInfo["audio_codec"] = audioCodec
+
+		if audioChannels:
+			mediaInfo["audio_channels"] = audioChannels
 
 cmd = "rclone lsf --format i"
 args = shlex.split(cmd)
 args.append(encryptedFilePath)
 fileID = subprocess.check_output(args).strip().decode("utf-8")
+mediaInfo["filename"] = fileID
 
 with open(strmPath, "w+") as strm:
 	# Every paramater is optional besides the filename (Google Drive File ID) - essential strm format is:
 	# plugin://plugin.video.gdrive/?mode=video&encfs=True&filename=7ctPNMUl4m8B4KBwY
-	strm.write("plugin://plugin.video.gdrive/?mode=video&encfs=True&video_codec={}&video_width={}&video_height={}&video_duration={}&aspect_ratio={}&audio_codec={}&audio_channels={}&filename={}".format(videoCodec, videoWidth, videoHeight, videoDuration, aspectRatio, audioCodec, audioChannels, fileID))
+	url = "plugin://plugin.video.gdrive/?mode=video&encfs=True" + "".join(["&{}={}".format(k, v) for k, v in mediaInfo.items()])
+	strm.write(url)
