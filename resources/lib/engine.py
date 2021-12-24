@@ -282,7 +282,7 @@ class ContentEngine:
 				return
 
 			validator = self.accountManager.validateAccount(self.cloudService, self.accounts[accountNumber])
-			pDialog.update(int(round(count / accountAmount * 100)), accountName)
+			pDialog.update(int(round(float(count) / float(accountAmount) * 100)), accountName)
 			count += 1
 
 			if validator == "failed":
