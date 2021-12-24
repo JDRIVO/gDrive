@@ -29,7 +29,7 @@ import xbmc
 import xbmcgui
 
 import constants
-from . import account_manager, encryption, enrolment, gdrive_api, gplayer
+from . import account_manager, encryption, enrolment, gdrive_api, player
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -47,11 +47,11 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 		self.accountManager = account_manager.AccountManager(self.settings)
 		self.cloudService = gdrive_api.GoogleDrive(self.settings.getParameter("user_agent"))
 
-	def startGPlayer(self, dbID, dbType, widget, trackProgress):
+	def startPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
-		player = gplayer.GPlayer(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
+		vPlayer = player.Player(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
 
-		while not self.monitor.abortRequested() and not player.close:
+		while not self.monitor.abortRequested() and not vPlayer.close:
 
 			if time.time() - lastUpdate >= 1740:
 				lastUpdate = time.time()
@@ -77,14 +77,14 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.send_response(200)
 			self.end_headers()
 
-		elif self.path == "/start_gplayer":
+		elif self.path == "/start_player":
 			contentLength = int(self.headers["Content-Length"])
 			postData = self.rfile.read(contentLength).decode("utf-8")
 			self.send_response(200)
 
 			self.end_headers()
 			dbID, dbType, widget, trackProgress = re.findall("dbid=([\d]+)&dbtype=(.*)&widget=(\d)&track=(\d)", postData)[0]
-			Thread(target=self.server.startGPlayer, args=(dbID, dbType, widget, trackProgress)).start()
+			Thread(target=self.server.startPlayer, args=(dbID, dbType, widget, trackProgress)).start()
 
 		elif self.path == "/enroll?default=false":
 			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
