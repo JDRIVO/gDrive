@@ -360,10 +360,6 @@ class ContentEngine:
 			self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30005))
 			return
 
-		if not self.settings.getSetting("crypto_password") or not self.settings.getSetting("crypto_salt"):
-			self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30208))
-			return
-
 		if (not dbID or not dbType) and not filePath:
 			timeEnd = time.time() + 1
 
@@ -488,7 +484,13 @@ class ContentEngine:
 		self.cloudService.refreshToken()
 		transcoded = False
 
-		if not crypto:
+		if crypto:
+
+			if not self.settings.getSetting("crypto_password") or not self.settings.getSetting("crypto_salt"):
+				self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30208))
+				return
+
+		else:
 			qualityPrompty = self.settings.getSetting("quality_prompt")
 			defaultResolution = self.settings.getSetting("default_resolution")
 
