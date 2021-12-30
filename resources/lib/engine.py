@@ -279,7 +279,7 @@ class ContentEngine:
 
 			self.cloudService.setAccount(self.accounts[accountNumber])
 			validation = self.cloudService.refreshToken()
-			pDialog.update(int(round(count / accountAmount * 100)), accountName)
+			pDialog.update(int(round(float(count) / float(accountAmount) * 100)), accountName)
 			count += 1
 
 			if validation == "failed":
