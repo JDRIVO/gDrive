@@ -2,14 +2,15 @@ from threading import Thread
 
 import xbmc
 
+import constants
 from resources.lib import streamer, watcher
 
 if __name__ == "__main__":
 	monitor = xbmc.Monitor()
 	watcher = watcher.LibraryMonitor()
-	server = streamer.MyHTTPServer()
+	server = streamer.MyHTTPServer(settings=constants.settings)
 
-	t = Thread(target=server.serve_forever)
+	t = Thread(target=server.run)
 	t.setDaemon(True)
 	t.start()
 
@@ -18,6 +19,4 @@ if __name__ == "__main__":
 		if monitor.waitForAbort(1):
 			break
 
-	server.server_close()
-	server.socket.close()
 	server.shutdown()

@@ -97,6 +97,10 @@ msgctxt "#30030"
 msgid "The private key wasn't found in your key file."
 msgstr "The private key wasn't found in your key file."
 
+msgctxt "#30031"
+msgid "Stream Quality"
+msgstr "Stream Quality"
+
 msgctxt "#30118"
 msgid "The following account was enrolled:"
 msgstr "The following account was enrolled:"
@@ -236,6 +240,14 @@ msgstr "Obtain Media Flag Information From STRM"
 msgctxt "#30406"
 msgid "Video Database File:"
 msgstr "Video Database File:"
+
+msgctxt "#30407"
+msgid "Display Resolution Selection (If Available):"
+msgstr "Display Resolution Selection (If Available):"
+
+msgctxt "#30408"
+msgid "Default Video Resolution:"
+msgstr "Default Video Resolution:"
 
 msgctxt "#30500"
 msgid "Streamer"

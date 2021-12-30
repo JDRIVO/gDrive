@@ -1,5 +1,6 @@
 # To be ran by the script that uploads files to Google Drive. Sync strms with resilio, syncthing etc. Install watchdog on Kodi.
 
+import os
 import re
 import sys
 import json
@@ -78,9 +79,11 @@ for dic in ffprobeOutput["streams"]:
 		if audioChannels:
 			mediaInfo["audio_channels"] = audioChannels
 
-if re.search("[._\- ](dv|dovi|dolby[._\- ]*vision)[._\- ]", videoPath, re.IGNORECASE):
+filename = os.path.basename(videoPath)
+
+if re.search("[-_. ](dv|dovi|dolby[-_. ]*vision)[-_. ]", filename, re.IGNORECASE):
 	mediaInfo["hdr"] = "dolbyvision"
-elif not mediaInfo.get("hdr") and re.search("hdr10", videoPath, re.IGNORECASE):
+elif not mediaInfo.get("hdr") and re.search("hdr10", filename, re.IGNORECASE):
 	mediaInfo["hdr"] = "hdr10"
 
 cmd = "rclone lsf --format i"
@@ -90,7 +93,12 @@ fileID = subprocess.check_output(args).strip().decode("utf-8")
 mediaInfo["filename"] = fileID
 
 with open(strmPath, "w+") as strm:
-	# Every paramater is optional besides the filename (Google Drive File ID) - essential strm format is:
+
+	# Essential strm format for unencrypted videos:
+	# plugin://plugin.video.gdrive/?mode=video&encfs=False&filename=7ctPNMUl4m8B4KBwY
+
+	# Essential strm format for gDrive encrypted videos:
 	# plugin://plugin.video.gdrive/?mode=video&encfs=True&filename=7ctPNMUl4m8B4KBwY
+
 	url = "plugin://plugin.video.gdrive/?mode=video&encfs=True" + "".join(["&{}={}".format(k, v) for k, v in mediaInfo.items()])
 	strm.write(url)

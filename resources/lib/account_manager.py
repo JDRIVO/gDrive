@@ -96,11 +96,6 @@ class AccountManager:
 		[(accountNames.append(accountInfo["username"]), accountNumbers.append(number)) for number, accountInfo in self.accounts.items()]
 		return accountNames, accountNumbers
 
-	def validateAccount(self, cloudService, account):
-		cloudService.account = account
-		validatorResult = cloudService.refreshToken()
-		return validatorResult
-
 	def getFallbackAccounts(self):
 		fallbackAccountNames = self.settings.getSetting("fallback_accounts_ui")
 		fallbackAccountNumbers = self.settings.getSetting("fallback_accounts")

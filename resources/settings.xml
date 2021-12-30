@@ -2,7 +2,6 @@
 <settings>
 
 	<category label="30300">
-		<setting id="user_agent" label="30001" type="text" default="Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/532.0 (KHTML, like Gecko) Chrome/3.0.195.38 Safari/532.0" visible="false" />
 		<setting id="default_account" label="30001" type="text" visible="false" />
 		<setting id="default_account_ui" label="30301" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=set_default_account)" />
 		<setting id="fallback" label="30302" type="bool" default="false" />
@@ -15,6 +14,8 @@
 	<category label="30400">
 		<setting id="movie_watch_time" label="30401" type="slider" default="93" option="percent" range="0,1,100" />
 		<setting id="tv_watch_time" label="30402" type="slider" default="88" option="percent" range="0,1,100" />
+		<setting id="quality_prompt" label="30407" type="bool" default="true" />
+		<setting id="default_resolution" label="30408" type="select" values="Original|1080P|720P|360P" default="Original" enable="eq(-1,false)" />
 		<setting id="playback_action" label="30403" type="select" values="Show resume prompt|Resume automatically|Play from beginning" default="Show resume prompt" />
 		<setting id="subtitles" label="30404" type="select" values="Subtitles are named the same as STRM|Subtitles aren't named the same as STRM and are in an isolated folder with STRM" default="Subtitles are named the same as STRM" />
 		<setting id="watcher" label="30405" type="bool" default="true" />

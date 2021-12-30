@@ -28,7 +28,6 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import xbmc
 import xbmcgui
 
-import constants
 from . import account_manager, encryption, enrolment, gdrive_api, player
 
 
@@ -39,23 +38,34 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 class MyHTTPServer(ThreadingMixIn, HTTPServer):
 
 	def __init__(self, *args, **kwargs):
-		self.settings = constants.settings
+		self.settings = kwargs["settings"]
 		port = self.settings.getSettingInt("server_port", 8011)
 		HTTPServer.__init__(self, ("", port), MyStreamer)
 
 		self.monitor = xbmc.Monitor()
 		self.accountManager = account_manager.AccountManager(self.settings)
-		self.cloudService = gdrive_api.GoogleDrive(self.settings.getParameter("user_agent"))
+		self.cloudService = gdrive_api.GoogleDrive()
+
+	def run(self):
+
+		try:
+			self.serve_forever()
+		except:
+			self.server_close()
 
 	def startPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
 		vPlayer = player.Player(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
+		expiry = self.cloudService.account["expiry"] - 30
 
 		while not self.monitor.abortRequested() and not vPlayer.close:
 
-			if time.time() - lastUpdate >= 1740:
+			if time.time() - lastUpdate >= expiry:
 				lastUpdate = time.time()
 				self.cloudService.refreshToken()
+
+				if self.transcoded:
+					self.playbackURL = self.cloudService.getStreams(self.fileID, self.transcoded)
 
 			if self.monitor.waitForAbort(1):
 				break
@@ -65,14 +75,24 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 	def do_POST(self):
 
-		if self.path == "/crypto_playurl":
+		if self.path == "/playurl":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
-			accountNumber, url = re.findall("account=(.*)&url=(.*)", postData)[0]
+			encrypted, accountNumber, url, transcoded, fileID = re.findall("encrypted=(.*)&account=(.*)&url=(.*)&transcoded=(.*)&fileid=(.*)", postData)[0]
 			self.server.accountManager.loadAccounts()
 			self.server.cloudService.setAccount(self.server.accountManager.accounts[accountNumber])
 
-			self.server.cloudService.refreshToken()
+			if encrypted == "True":
+				self.server.crypto = True
+			else:
+				self.server.crypto = False
+
+			if transcoded == "False":
+				self.server.transcoded = False
+			else:
+				self.server.transcoded = transcoded
+				self.server.fileID = fileID
+
 			self.server.playbackURL = url
 			self.send_response(200)
 			self.end_headers()
@@ -87,8 +107,8 @@ class MyStreamer(BaseHTTPRequestHandler):
 			Thread(target=self.server.startPlayer, args=(dbID, dbType, widget, trackProgress)).start()
 
 		elif self.path == "/enroll?default=false":
-			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
-			postData = self.rfile.read(contentLength).decode("utf-8")  # <--- Gets the data itself
+			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
+			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
 			self.send_response(200)
 			self.end_headers()
 
@@ -97,8 +117,8 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.wfile.write(data.encode("utf-8"))
 
 		elif self.path == "/enroll":
-			contentLength = int(self.headers["Content-Length"])  # <--- Gets the size of data
-			postData = self.rfile.read(contentLength).decode("utf-8")  # <--- Gets the data itself
+			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
+			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
 			postData = urllib.unquote_plus(postData)
 			self.send_response(200)
 
@@ -230,12 +250,12 @@ class MyStreamer(BaseHTTPRequestHandler):
 			if self.server.failed:
 				return
 
-			start, end = re.findall("Range:[\s]*bytes=([\d]+)-([\d]*)", str(self.headers), re.DOTALL)[0]
-			if start: start = int(start)
-			if end: end = int(end)
+			start, end = re.findall("([\d]+)-([\d]*)", self.headers["range"])[0]
+			start = int(start) if start else ""
+			end = int(end) if end else ""
 			startOffset = 0
 
-			if start and start > 16 and not end:
+			if self.server.crypto and start != "" and start > 16 and end == "":
 				# start = start - (16 - (end % 16))
 				xbmc.log("START = " + str(start))
 				startOffset = 16 - ((int(self.server.length) - start) % 16) + 8
@@ -247,7 +267,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 			url = self.server.playbackURL
 			xbmc.log("GET " + url + "\n" + self.server.cloudService.getHeadersEncoded() + "\n")
 
-			if not start:
+			if start == "":
 				req = urllib2.Request(url, headers=self.server.cloudService.getHeaders())
 			else:
 				req = urllib2.Request(
@@ -264,7 +284,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 				xbmc.log("gdrive error: " + str(e))
 				return
 
-			if not start:
+			if start == "":
 				self.send_response(200)
 				self.send_header("Content-Length", response.info().get("Content-Length"))
 			else:
@@ -292,12 +312,30 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.end_headers()
 			# may want to add more granular control over chunk fetches
 			# self.wfile.write(response.read())
-			decrypt = encryption.Encryption(self.server.settings.getSetting("crypto_salt"), self.server.settings.getSetting("crypto_password"))
 
-			try:
-				decrypt.decryptStreamChunkOld(response, self.wfile, startOffset=startOffset)
-			except Exception as e:
-				xbmc.log(str(e))
+			if self.server.crypto:
+				decrypt = encryption.Encryption(self.server.settings.getSetting("crypto_salt"), self.server.settings.getSetting("crypto_password"))
+
+				try:
+					decrypt.decryptStreamChunkOld(response, self.wfile, startOffset=startOffset)
+				except Exception as e:
+					xbmc.log(str(e))
+
+			else:
+				CHUNK = 16 * 1024
+
+				try:
+
+					while True:
+						chunk = response.read(CHUNK)
+
+						if not chunk:
+							break
+
+						self.wfile.write(chunk)
+
+				except Exception as e:
+					xbmc.log(str(e))
 
 			response.close()
 
