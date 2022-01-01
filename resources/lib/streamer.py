@@ -75,7 +75,7 @@ class MyStreamer(BaseHTTPRequestHandler):
 
 	def do_POST(self):
 
-		if self.path == "/playurl":
+		if self.path == "/play_url":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
 			encrypted, accountNumber, url, transcoded, fileID = re.findall("encrypted=(.*)&account=(.*)&url=(.*)&transcoded=(.*)&fileid=(.*)", postData)[0]

@@ -103,7 +103,7 @@ class GoogleDrive:
 	def getHeadersEncoded(self):
 		return urllib.urlencode(self.getHeaders())
 
-	def getStreams(self, fileID, defaultResolution=False):
+	def getStreams(self, fileID, resolutionPriority=None):
 		url = "https://drive.google.com/get_video_info?docid=" + fileID
 		self.account["drive_stream"] = ""
 		responseData, cookie = self.sendPayload(url, headers=self.getHeaders(), cookie=True)
@@ -116,18 +116,27 @@ class GoogleDrive:
 		# urls = re.sub("\\\\u0026", "&", urls)
 		urls = re.sub("\&url\=https://", "\@", responseData)
 		streams = {}
+		resolutions = {}
 
 		for r in re.finditer("([\d]+)/[\d]+x([\d]+)", urls, re.DOTALL):
 			itag, resolution = r.groups()
-			streams[itag] = {"resolution": resolution + "P"}
+			resolution = resolution + "P"
+			resolutions[resolution] = itag
+			streams[itag] = {"resolution": resolution}
 
 		for r in re.finditer("\@([^\@]+)", urls):
 			videoURL = r.group(1)
 			itag = re.findall("itag=([\d]+)", videoURL)[0]
 			streams[itag]["url"] = "https://" + videoURL + "|" + self.getHeadersEncoded()
 
-			if defaultResolution and streams[itag]["resolution"] == defaultResolution:
-				return streams[itag]["url"]
+		if streams and resolutionPriority:
 
-		if streams and not defaultResolution:
+			for resolution in resolutionPriority:
+
+				if resolution == "Original":
+					return
+				elif resolution in resolutions:
+					return resolution, streams[resolutions[resolution]]["url"]
+
+		elif streams:
 			return sorted([(v["resolution"], v["url"]) for k, v in streams.items()], key=lambda x: int(x[0][:-1]), reverse=True)

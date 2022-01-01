@@ -246,8 +246,8 @@ msgid "Display Resolution Selection (If Available)"
 msgstr "Display Resolution Selection (If Available)"
 
 msgctxt "#30408"
-msgid "Default Video Resolution:"
-msgstr "Default Video Resolution:"
+msgid "Video Resolution Priority:"
+msgstr "Video Resolution Priority:"
 
 msgctxt "#30500"
 msgid "Streamer"

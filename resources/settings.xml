@@ -15,7 +15,7 @@
 		<setting id="movie_watch_time" label="30401" type="slider" default="93" option="percent" range="0,1,100" />
 		<setting id="tv_watch_time" label="30402" type="slider" default="88" option="percent" range="0,1,100" />
 		<setting id="quality_prompt" label="30407" type="bool" default="true" />
-		<setting id="default_resolution" label="30408" type="select" values="Original|1080P|720P|480P|360P" default="Original" enable="eq(-1,false)" />
+		<setting id="resolution_priority" label="30408" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=resolution_priority)" default="Original, 1080P, 720P, 480P, 360P" enable="eq(-1,false)" />
 		<setting id="playback_action" label="30403" type="select" values="Show resume prompt|Resume automatically|Play from beginning" default="Show resume prompt" />
 		<setting id="subtitles" label="30404" type="select" values="Subtitles are named the same as STRM|Subtitles aren't named the same as STRM and are in an isolated folder with STRM" default="Subtitles are named the same as STRM" />
 		<setting id="watcher" label="30405" type="bool" default="true" />
