@@ -65,7 +65,7 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 				self.cloudService.refreshToken()
 
 				if self.transcoded:
-					self.playbackURL = self.cloudService.getStreams(self.fileID, self.transcoded)
+					self.playbackURL = self.cloudService.getStreams(self.fileID, (self.transcoded,))[1]
 
 			if self.monitor.waitForAbort(1):
 				break
