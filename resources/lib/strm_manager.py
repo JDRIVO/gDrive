@@ -418,7 +418,7 @@ class StrmManager:
 			"video_duration": videoDuration,
 			"video_codec": videoCodec,
 			"audio_codec": audioCodec,
-			"audio_chanels": audioChannels,
+			"audio_channels": audioChannels,
 			"hdr": hdr,
 		}
 
@@ -839,7 +839,7 @@ class StrmManager:
 			driveSettings = self.strmSettings["drives"].get(driveID)
 		else:
 			driveSettings = {}
-			gdriveRoot = self.dialog.browse(0, "Select the folder that the STRMs will be stored in", "files")
+			gdriveRoot = self.dialog.browse(0, "Select the folder that your files will be stored in", "files")
 
 			if not gdriveRoot:
 				return
@@ -900,7 +900,7 @@ class StrmManager:
 			folderStructure = "kodi_friendly"
 
 		syncNFOs = self.dialog.yesno("gDrive", "Sync NFOs?")
-		syncArtwork = self.dialog.yesno("gDrive", 'Sync Artwork? "fanart"/"posters" must be included in the filename')
+		syncArtwork = self.dialog.yesno("gDrive", 'Sync Artwork? "fanart"/"posters" must be included in the filename.')
 		syncSubtitles = self.dialog.yesno("gDrive", "Sync Subtitles?")
 		self.dialog.notification("gDrive", "Generating files please wait. A notification will appear when this task has completed.")
 

@@ -331,7 +331,7 @@ class ContentEngine:
 			else:
 				contextMenu = [
 					(
-						"Sync Folder",
+						"Sync folder",
 						"XBMC.RunPlugin({})".format(
 							pluginURL + "?mode=add_strm&drive_id={}&folder_id={}&folder_name={}".format(
 							driveID, folderID if folderID else driveID, folderName
