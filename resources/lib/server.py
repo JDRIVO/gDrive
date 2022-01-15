@@ -18,9 +18,11 @@
 """
 
 import re
+import json
 import time
 import urllib
 import urllib2
+import datetime
 from threading import Thread
 from SocketServer import ThreadingMixIn
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
@@ -28,7 +30,7 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import xbmc
 import xbmcgui
 
-from . import account_manager, encryption, enrolment, gdrive_api, player
+from . import account_manager, encryption, enrolment, gdrive_api, player, strm_manager
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
@@ -44,7 +46,9 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 
 		self.monitor = xbmc.Monitor()
 		self.accountManager = account_manager.AccountManager(self.settings)
-		self.cloudService = gdrive_api.GoogleDrive()
+		self.cloudService = gdrive_api.GoogleDrive(self.accountManager)
+		self.strmManager = strm_manager.StrmManager(self.settings, self.accountManager)
+		self.strmManager.run()
 
 	def run(self):
 
@@ -56,16 +60,17 @@ class MyHTTPServer(ThreadingMixIn, HTTPServer):
 	def startPlayer(self, dbID, dbType, widget, trackProgress):
 		lastUpdate = time.time()
 		vPlayer = player.Player(dbID=dbID, dbType=dbType, widget=int(widget), trackProgress=int(trackProgress), settings=self.settings)
-		expiry = self.cloudService.account["expiry"] - 30
+		expiry = datetime.datetime(*(time.strptime(self.cloudService.account["expiry"], "%Y-%m-%d %H:%M:%S.%f")[0:6]))
 
 		while not self.monitor.abortRequested() and not vPlayer.close:
 
-			if time.time() - lastUpdate >= expiry:
-				lastUpdate = time.time()
-				self.cloudService.refreshToken()
+			if datetime.datetime.now() >= expiry:
+				expiry = self.cloudService.refreshToken()
 
 				if self.transcoded:
 					self.playbackURL = self.cloudService.getStreams(self.fileID, (self.transcoded,))[1]
+
+				self.accountManager.saveAccounts()
 
 			if self.monitor.waitForAbort(1):
 				break
@@ -78,9 +83,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 		if self.path == "/play_url":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
 			postData = self.rfile.read(contentLength).decode("utf-8") # <--- Gets the data itself
-			encrypted, accountNumber, url, transcoded, fileID = re.findall("encrypted=(.*)&account=(.*)&url=(.*)&transcoded=(.*)&fileid=(.*)", postData)[0]
+			encrypted, self.server.playbackURL, self.server.driveID, fileID, transcoded = re.findall("encrypted=(.*)&url=(.*)&driveid=(.*)&fileid=(.*)&transcoded=(.*)", postData)[0]
 			self.server.accountManager.loadAccounts()
-			self.server.cloudService.setAccount(self.server.accountManager.accounts[accountNumber])
+			account = self.server.accountManager.getAccount(self.server.driveID)
+			self.server.cloudService.setAccount(account)
 
 			if encrypted == "True":
 				self.server.crypto = True
@@ -93,7 +99,6 @@ class MyStreamer(BaseHTTPRequestHandler):
 				self.server.transcoded = transcoded
 				self.server.fileID = fileID
 
-			self.server.playbackURL = url
 			self.send_response(200)
 			self.end_headers()
 
@@ -105,6 +110,14 @@ class MyStreamer(BaseHTTPRequestHandler):
 			self.end_headers()
 			dbID, dbType, widget, trackProgress = re.findall("dbid=([\d]+)&dbtype=(.*)&widget=(\d)&track=(\d)", postData)[0]
 			Thread(target=self.server.startPlayer, args=(dbID, dbType, widget, trackProgress)).start()
+
+		elif self.path == "/add_sync_task":
+			contentLength = int(self.headers["Content-Length"])
+			postData = self.rfile.read(contentLength).decode("utf-8")
+			self.send_response(200)
+			self.end_headers()
+			driveID, folderID, folderName = re.findall("drive_id=(.*)&folder_id=(.*)&folder_name=(.*)", postData)[0]
+			self.server.strmManager.addTask(driveID, folderID, folderName)
 
 		elif self.path == "/enroll?default=false":
 			contentLength = int(self.headers["Content-Length"]) # <--- Gets the size of data
@@ -131,21 +144,21 @@ class MyStreamer(BaseHTTPRequestHandler):
 				self.wfile.write(data.encode("utf-8"))
 				return
 
+			account = {
+				"username": accountName,
+				"code": code,
+				"client_id": clientID,
+				"client_secret": clientSecret,
+				"refresh_token": refreshToken,
+			}
+			self.server.cloudService.setAccount(account)
+			self.server.cloudService.refreshToken()
+			driveID = self.server.cloudService.getDriveID()
 			self.server.accountManager.loadAccounts()
 			accountNumber = self.server.accountManager.addAccount(
-				{
-					"username": accountName,
-					"code": code,
-					"client_id": clientID,
-					"client_secret": clientSecret,
-					"refresh_token": refreshToken,
-				}
+				account,
+				driveID,
 			)
-			defaultAccountName, defaultAccountNumber = self.server.accountManager.getDefaultAccount()
-
-			if not defaultAccountName:
-				self.server.accountManager.setDefaultAccount(accountName, accountNumber)
-
 			data = enrolment.status("Successfully enrolled account")
 			self.wfile.write(data.encode("utf-8"))
 
@@ -170,20 +183,11 @@ class MyStreamer(BaseHTTPRequestHandler):
 					return
 
 				elif e.code == 403 or e.code == 429:
-
-					if not self.server.settings.getSetting("fallback"):
-						xbmcgui.Dialog().ok(
-							self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),
-							self.server.settings.getLocalizedString(30009),
-						)
-						return
-
-					fallbackAccountNames, fallbackAccountNumbers = self.server.accountManager.getFallbackAccounts()
-					defaultAccountName, defaultAccountNumber = self.server.accountManager.getDefaultAccount()
 					accountChange = False
+					accounts = self.server.accountManager.getAccounts(self.server.driveID)
 
-					for fallbackAccountName, fallbackAccountNumber in list(zip(fallbackAccountNames, fallbackAccountNumbers)):
-						self.server.cloudService.setAccount(self.server.accountManager.accounts[fallbackAccountNumber])
+					for account in accounts:
+						self.server.cloudService.setAccount(account)
 						refreshToken = self.server.cloudService.refreshToken()
 
 						if refreshToken == "failed":
@@ -197,22 +201,14 @@ class MyStreamer(BaseHTTPRequestHandler):
 						except urllib2.URLError as e:
 							continue
 
-						if not defaultAccountNumber in fallbackAccountNumbers:
-							fallbackAccountNames.append(defaultAccountName)
-							fallbackAccountNumbers.append(defaultAccountNumber)
-
-						fallbackAccountNames.remove(fallbackAccountName)
-						fallbackAccountNumbers.remove(fallbackAccountNumber)
-						self.server.accountManager.setDefaultAccount(fallbackAccountName, fallbackAccountNumber)
-
+						account = account
+						account["expiry"] = refreshToken
+						accountChange = True
 						xbmcgui.Dialog().notification(
 							self.server.settings.getLocalizedString(30003) + ": " + self.server.settings.getLocalizedString(30006),
 							self.server.settings.getLocalizedString(30007),
 						)
-						accountChange = True
 						break
-
-					self.server.accountManager.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
 
 					if not accountChange:
 						xbmcgui.Dialog().ok(
@@ -220,6 +216,10 @@ class MyStreamer(BaseHTTPRequestHandler):
 							self.server.settings.getLocalizedString(30009),
 						)
 						return
+					else:
+						accounts.remove(account)
+						accounts.insert(0, account)
+						self.server.accountManager.saveAccounts()
 
 				else:
 					xbmc.log("gdrive error: " + str(e))

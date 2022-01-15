@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
 
-	<category label="30300">
-		<setting id="default_account" label="30001" type="text" visible="false" />
-		<setting id="default_account_ui" label="30301" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=set_default_account)" />
-		<setting id="fallback" label="30302" type="bool" default="false" />
-		<setting id="fallback_accounts" label="30001" type="text" visible="false" />
-		<setting id="fallback_accounts_ui" label="30303" subsetting="true" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=add_fallback_account)" visible="eq(-2,true)" />
-		<setting id="validate_accounts" label="30304" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=validate_accounts)" />
-		<setting id="delete_accounts" label="30305" type="action" action="RunPlugin(plugin://plugin.video.gdrive/?mode=settings_delete_account)" />
-	</category>
-
 	<category label="30400">
 		<setting id="movie_watch_time" label="30401" type="slider" default="93" option="percent" range="0,1,100" />
 		<setting id="tv_watch_time" label="30402" type="slider" default="88" option="percent" range="0,1,100" />

@@ -2,30 +2,51 @@ import re
 import json
 import urllib
 import urllib2
+import datetime
 
 import xbmc
 
 from . import encryption
 
 API_VERSION = "3"
+GDRIVE_URL = "https://www.googleapis.com/drive/v3"
 GOOGLE_AUTH_URL = "https://oauth2.googleapis.com/token"
 SCOPE_URL = "https://www.googleapis.com/auth/drive.readonly"
-GDRIVE_URL = "https://www.googleapis.com/drive/v3/files/"
-GDRIVE_PARAMS = "?supportsAllDrives=true&alt=media"
 USER_AGENT = "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US) AppleWebKit/532.0 (KHTML, like Gecko) Chrome/3.0.195.38 Safari/532.0"
+HEADERS = {"User-Agent": USER_AGENT}
+HEADERS_FORM_ENCODED = {
+	"User-Agent": USER_AGENT,
+	"Content-Type": "application/x-www-form-urlencoded",
+}
+
+API = {
+	"changes": GDRIVE_URL + "/changes",
+	"drives": GDRIVE_URL + "/drives",
+	"files": GDRIVE_URL + "/files",
+}
 
 
 class GoogleDrive:
+
+	def __init__(self, accountManager):
+		self.accountManager = accountManager
 
 	def setAccount(self, account):
 		self.account = account
 
 	@staticmethod
 	def constructDriveURL(fileID):
-		return GDRIVE_URL + fileID + GDRIVE_PARAMS
+		params = {
+			"q": "supportsAllDrives=true",
+			"alt": "media",
+		}
+		return "{}/{}?{}".format(
+			API["files"],
+			fileID,
+			urllib.urlencode(params),
+		)
 
-	@staticmethod
-	def sendPayload(url, data=None, headers={}, cookie=None):
+	def sendPayload(self, url, data=None, headers=HEADERS, cookie=None, download=False):
 
 		if data:
 			data = data.encode("utf8")
@@ -36,19 +57,19 @@ class GoogleDrive:
 			response = urllib2.urlopen(req)
 		except urllib2.URLError as e:
 			xbmc.log("gdrive error: " + str(e))
-			return "failed", str(e)
+			return {"failed": str(e)}
 
-		responseData = response.read().decode("utf-8")
-		if cookie: cookie = response.headers['set-cookie']
+		responseData = response.read()
+
+		if download:
+			return responseData
+
+		responseData = responseData.decode("utf-8")
+		if cookie: cookie = response.headers["set-cookie"]
 		response.close()
 
 		try:
 			responseData = json.loads(responseData)
-
-			if responseData.get("error_description"):
-				error = responseData["error_description"]
-				xbmc.log("gdrive error: " + error)
-				return "failed", error
 		except:
 			pass
 
@@ -61,8 +82,7 @@ class GoogleDrive:
 		data = "code={}&client_id={}&client_secret={}&redirect_uri=urn:ietf:wg:oauth:2.0:oob&grant_type=authorization_code".format(
 			code, clientID, clientSecret
 		)
-		headers = {"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"}
-		response = self.sendPayload(GOOGLE_AUTH_URL, data, headers)
+		response = self.sendPayload(GOOGLE_AUTH_URL, data, HEADERS_FORM_ENCODED)
 
 		if "failed" in response:
 			return response
@@ -80,14 +100,15 @@ class GoogleDrive:
 				self.account["client_id"], self.account["client_secret"], self.account["refresh_token"]
 			)
 
-		headers = {"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"}
-		response = self.sendPayload(GOOGLE_AUTH_URL, data, headers)
+		response = self.sendPayload(GOOGLE_AUTH_URL, data, HEADERS_FORM_ENCODED)
 
 		if "failed" in response:
 			return "failed"
 
 		self.account["access_token"] = response["access_token"].rstrip(".")
-		self.account["expiry"] = response["expires_in"]
+		expiry = datetime.datetime.now() + datetime.timedelta(seconds=response["expires_in"] - 600)
+		self.account["expiry"] = str(expiry)
+		return expiry
 
 	def getHeaders(self, accessToken=None, additionalHeader=None, additionalValue=None):
 		cookie = self.account.get("drive_stream")
@@ -96,9 +117,16 @@ class GoogleDrive:
 		if not cookie: cookie = ""
 
 		if additionalHeader:
-			return {"Cookie": "DRIVE_STREAM=" + cookie, "Authorization": "Bearer " + accessToken, additionalHeader: additionalValue}
+			return {
+				"Cookie": "DRIVE_STREAM=" + cookie,
+				"Authorization": "Bearer " + accessToken,
+				additionalHeader: additionalValue,
+			}
 		else:
-			return {"Cookie": "DRIVE_STREAM=" + cookie, "Authorization": "Bearer " + accessToken}
+			return {
+				"Cookie": "DRIVE_STREAM=" + cookie,
+				"Authorization": "Bearer " + accessToken,
+			}
 
 	def getHeadersEncoded(self):
 		return urllib.urlencode(self.getHeaders())
@@ -140,3 +168,107 @@ class GoogleDrive:
 
 		elif streams:
 			return sorted([(v["resolution"], v["url"]) for k, v in streams.items()], key=lambda x: int(x[0][:-1]), reverse=True)
+
+	def getDrives(self):
+		url = API["drives"]
+		response = self.sendPayload(url=url, headers=self.getHeaders())
+
+		if "failed" in response:
+			return response
+
+		return response.get("drives")
+
+	def getDriveID(self):
+		url = API["files"] + "/root"
+		response = self.sendPayload(url, headers=self.getHeaders())
+
+		if "failed" in response:
+			return response
+
+		return response.get("id")
+
+	def downloadFile(self, fileID):
+		params = {"alt": "media"}
+		url = "{}/{}?{}".format(API["files"], fileID, urllib.urlencode(params))
+		return self.sendPayload(url, headers=self.getHeaders(), download=True)
+
+	def getDirectory(self, fileID):
+		params = {"fields": "parents,name"}
+		url = "{}/{}?{}".format(API["files"], fileID, urllib.urlencode(params))
+		response = self.sendPayload(url, headers=self.getHeaders())
+		return response["name"], response["parents"][0]
+
+	def listDir(self, folderID="root", sharedWithMe=False, foldersOnly=False):
+
+		if foldersOnly:
+
+			if sharedWithMe:
+				params = {
+					"q": "mimeType='application/vnd.google-apps.folder' and sharedWithMe=true and not trashed",
+					"fields": "nextPageToken,files(id,name)",
+					"supportsAllDrives": "true",
+					"includeItemsFromAllDrives": "true",
+					"pageSize": "1000",
+				}
+			else:
+				params = {
+					"q": "mimeType='application/vnd.google-apps.folder' and '{}' in parents and not trashed".format(folderID),
+					"fields": "nextPageToken,files(id,name)",
+					"supportsAllDrives": "true",
+					"includeItemsFromAllDrives": "true",
+					"pageSize": "1000",
+				}
+
+		else:
+			params = {
+				"q": "'{}' in parents and not trashed".format(folderID),
+				"fields": "nextPageToken,files(id,parents,name,mimeType,videoMediaMetadata,fileExtension)",
+				"supportsAllDrives": "true",
+				"includeItemsFromAllDrives": "true",
+				"pageSize": "1000",
+			}
+
+		files = []
+		pageToken = True
+
+		while pageToken:
+			url = "{}?{}".format(API["files"], urllib.urlencode(params))
+			response = self.sendPayload(url, headers=self.getHeaders())
+
+			pageToken = response.get("nextPageToken")
+
+			if not pageToken:
+				files += response["files"]
+				return files
+			else:
+				params["pageToken"] = pageToken
+
+	def getPageToken(self):
+		params = {"supportsAllDrives": "true"}
+		url = "{}/startPageToken?{}".format(API["changes"], urllib.urlencode(params))
+		response = self.sendPayload(url, headers=self.getHeaders())
+		return response.get("startPageToken")
+
+	def getChanges(self, pageToken):
+		params = {
+			"pageToken": pageToken,
+			"fields": "nextPageToken,newStartPageToken,changes(file(id,name,parents,trashed,mimeType,fileExtension,videoMediaMetadata))",
+			"supportsAllDrives": "true",
+			"includeItemsFromAllDrives": "true",
+			"pageSize": "1000",
+		}
+		changes = {"changes": []}
+		nextPageToken = True
+
+		while nextPageToken:
+			url = "{}?{}".format(API["changes"], urllib.urlencode(params))
+			response = self.sendPayload(url, headers=self.getHeaders())
+			nextPageToken = response.get("nextPageToken")
+
+			if not nextPageToken:
+				changes["changes"] += response["changes"]
+				changes["newStartPageToken"] = response["newStartPageToken"]
+				return changes
+			else:
+				changes["changes"] += response["changes"]
+				params["pageToken"] = nextPageToken
