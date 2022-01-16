@@ -486,8 +486,8 @@ class StrmManager:
 			videoFilename = os.path.splitext(filename)[0]
 			fileID = videoFile["id"]
 			videoMetadata = videoFile["metadata"]
-			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
 
+			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
 			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
 			dirPath = remotePath
 			newVideoFilename = videoRenamed = strmPath = False

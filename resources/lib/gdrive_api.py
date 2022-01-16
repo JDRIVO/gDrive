@@ -171,13 +171,21 @@ class GoogleDrive:
 			return sorted([(v["resolution"], v["url"]) for k, v in streams.items()], key=lambda x: int(x[0][:-1]), reverse=True)
 
 	def getDrives(self):
-		url = API["drives"]
-		response = self.sendPayload(url=url, headers=self.getHeaders())
+		params = {"pageSize": "100"}
+		drives = []
+		pageToken = True
 
-		if "failed" in response:
-			return response
+		while pageToken:
+			url = "{}?{}".format(API["drives"], urllib.parse.urlencode(params))
+			response = self.sendPayload(url, headers=self.getHeaders())
 
-		return response.get("drives")
+			pageToken = response.get("nextPageToken")
+
+			if not pageToken:
+				drives += response["drives"]
+				return drives
+			else:
+				params["pageToken"] = pageToken
 
 	def getDriveID(self):
 		url = API["files"] + "/root"
