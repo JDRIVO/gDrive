@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import json
 import math
 import time
@@ -27,6 +28,27 @@ SUBTITLES = (
 	"sbv",
 	"stl",
 	"smi",
+)
+
+WINDOWS_PROHIBITED_CHARS = (
+	"<",
+	">",
+	"/",
+	"\\",
+	"?",
+	"*",
+	":",
+	"|",
+	'"',
+)
+
+LINUX_PROHIBITED_CHARS = (
+	"\\",
+)
+
+OSX_PROHIBITED_CHARS = (
+	"\\",
+	":",
 )
 
 
@@ -226,7 +248,7 @@ class StrmManager:
 		for file in list(files):
 			fileID = file["id"]
 			filename = file["filename"]
-			filePath = self.duplicateFileCheck(dirPath, filename)
+			filePath = self.generateFilePath(dirPath, filename)
 			self.downloadFile(dirPath, filePath, fileID)
 			filenames[fileID] = [
 				filename,
@@ -247,6 +269,35 @@ class StrmManager:
 
 		with open(filePath, "wb") as f:
 			f.write(file)
+
+	@staticmethod
+	def removeProhibitedFSchars(filename):
+		platform = sys.platform
+
+		if platform == "linux" or platform == "linux2":
+			prohibited = LINUX_PROHIBITED_CHARS
+		elif platform == "darwin":
+			prohibited = OSX_PROHIBITED_CHARS
+		elif platform == "win32":
+			prohibited = WINDOWS_PROHIBITED_CHARS
+
+		return "".join([chr for chr in filename if chr not in prohibited])
+
+	def generateFilePath(self, dirPath, filename):
+		filename = self.removeProhibitedFSchars(filename)
+		return self.duplicateFileCheck(dirPath, filename)
+
+	@staticmethod
+	def duplicateFileCheck(dirPath, filename):
+		filePath = os.path.join(dirPath, filename)
+		filename, fileExtension = os.path.splitext(filename)
+		copy = 1
+
+		while os.path.exists(filePath):
+			filePath = os.path.join(dirPath, "{} ({}){}".format(filename, copy, fileExtension))
+			copy += 1
+
+		return filePath
 
 	def createDirs(self, dirPath):
 
@@ -326,18 +377,6 @@ class StrmManager:
 		else:
 			return "File not found"
 
-	@staticmethod
-	def duplicateFileCheck(dirPath, filename):
-		filePath = os.path.join(dirPath, filename)
-		filename, fileExtension = os.path.splitext(filename)
-		copy = 1
-
-		while os.path.exists(filePath):
-			filePath = os.path.join(dirPath, "{} ({}){}".format(filename, copy, fileExtension))
-			copy += 1
-
-		return filePath
-
 	def pairMediaCompanions(self, mediaExtras, videoFilename, newVideoFilename, fileExtension, dirPath, videoRenamed, originalPath, fileCache, folderID, subtitles=False):
 
 		for mediaExtra in list(mediaExtras):
@@ -355,7 +394,7 @@ class StrmManager:
 					else:
 						newFilename = newVideoFilename + fileExtension
 
-				filePath = self.duplicateFileCheck(dirPath, newFilename)
+				filePath = self.generateFilePath(dirPath, newFilename)
 				self.downloadFile(dirPath, filePath, fileID)
 				mediaExtras.remove(mediaExtra)
 
@@ -450,9 +489,8 @@ class StrmManager:
 			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
 
 			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
-			strmPath = self.duplicateFileCheck(remotePath, videoFilename + ".strm")
 			dirPath = remotePath
-			newVideoFilename = videoRenamed = False
+			newVideoFilename = videoRenamed = strmPath = False
 			originalPath = True
 
 			if folderStructure != "original" or fileRenaming != "original":
@@ -484,25 +522,25 @@ class StrmManager:
 						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
 						if fileRenaming != "original" and newVideoFilename:
-							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
 						else:
-							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
+							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 						originalPath = False
 
 					elif video == "episode" and newVideoFilename:
 						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
-						
+
 						if fileRenaming != "original":
-							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
 						else:
-							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
+							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 						videoRenamed = True
 						originalPath = False
 
 				elif fileRenaming != "original" and newVideoFilename:
-					strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+					strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
 					videoRenamed = True
 
 				if syncSubtitles and subtitles:
@@ -518,6 +556,9 @@ class StrmManager:
 
 				if syncNFO and nfos:
 					self.pairMediaCompanions(nfos, videoFilename, newVideoFilename, ".nfo", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
+
+			if not strmPath:
+				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 			self.createStrm(dirPath, strmPath, strmContent)
 
