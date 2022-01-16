@@ -557,10 +557,11 @@ class StrmManager:
 		self.cloudService.setAccount(account)
 		self.cloudService.refreshToken()
 		driveSettings = self.strmSettings["drives"][driveID]
-
 		apiCall = self.cloudService.getChanges(driveSettings["page_token"])
+
 		changes = apiCall["changes"]
 		pageToken = apiCall["newStartPageToken"]
+		strmRoot = self.strmSettings["root_path"]
 		xbmc.log("THE CHANGES ARE ", xbmc.LOGERROR)
 		xbmc.log(json.dumps(changes, sort_keys=True, indent=4), xbmc.LOGERROR)
 
@@ -571,7 +572,7 @@ class StrmManager:
 		filenames = driveSettings["filenames"]
 		folders = driveSettings["folders"]
 		newFiles = {}
-		deletedPaths = []
+		deleted = False
 
 		for change in changes:
 			file = change["file"]
@@ -598,6 +599,7 @@ class StrmManager:
 						self.deleteFile(filePath)
 
 					del filenames[fileID]
+					deleted = True
 
 					if cachedParentFolderID in dirPaths:
 						cachedDirPath, cachedRootFolderID, cachedParentFolderID = dirPaths[cachedParentFolderID]
@@ -732,7 +734,6 @@ class StrmManager:
 				)
 
 		if newFiles:
-			strmRoot = self.strmSettings["root_path"]
 
 			for folderID, files in newFiles.items():
 				folderSettings = folders[folderID]
@@ -740,7 +741,14 @@ class StrmManager:
 				parentFolderID = files["parent_folder_id"]
 				self.fileProcessor(files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID)
 
-			xbmc.executebuiltin("UpdateLibrary(video)")
+			xbmc.executebuiltin("UpdateLibrary(video,{})".format(strmRoot))
+
+		if deleted:
+
+			if os.name == "nt":
+				strmRoot = strmRoot.replace("\\", "\\\\")
+
+			xbmc.executeJSONRPC('{"jsonrpc": "2.0", "id": 1, "method": "VideoLibrary.Clean", "params": {"showdialogs": false, "content": "video", "directory": "%s"}}' % strmRoot)
 
 		driveSettings["page_token"] = pageToken
 		self.saveStrmSettings()
