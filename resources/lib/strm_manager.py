@@ -518,9 +518,9 @@ class StrmManager:
 					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
 
 				if folderStructure != "original" and video:
-					dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
 					if video == "movie":
+						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
 						if fileRenaming != "original" and newVideoFilename:
 							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
