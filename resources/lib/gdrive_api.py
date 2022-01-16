@@ -194,7 +194,11 @@ class GoogleDrive:
 		return self.sendPayload(url, headers=self.getHeaders(), download=True)
 
 	def getDirectory(self, fileID):
-		params = {"fields": "parents,name"}
+		params = {
+			"fields": "parents,name",
+			"supportsAllDrives": "true",
+			"includeItemsFromAllDrives": "true",
+		}
 		url = "{}/{}?{}".format(API["files"], fileID, urllib.parse.urlencode(params))
 		response = self.sendPayload(url, headers=self.getHeaders())
 		return response["name"], response["parents"][0]
