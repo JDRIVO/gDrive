@@ -158,7 +158,7 @@ class StrmManager:
 		req = urllib2.Request(url, headers=headers)
 
 		try:
-			response = urllib2.urlopen(req).read()
+			response = urllib2.urlopen(req).read().decode("utf-8")
 		except urllib2.URLError as e:
 			xbmc.log("gdrive error: " + str(e), xbmc.LOGERROR)
 			return
@@ -179,7 +179,7 @@ class StrmManager:
 			req = urllib2.Request(url, headers=headers)
 
 			try:
-				response = urllib2.urlopen(req).read()
+				response = urllib2.urlopen(req).read().decode("utf-8")
 			except urllib2.URLError as e:
 				xbmc.log("gdrive error: " + str(e), xbmc.LOGERROR)
 				return
@@ -479,16 +479,12 @@ class StrmManager:
 					video = "movie"
 					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
 
-				if fileRenaming != "original" and newVideoFilename:
-					strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
-					videoRenamed = True
-
 				if folderStructure != "original" and video:
+					dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
 					if video == "movie":
 
 						if fileRenaming != "original" and newVideoFilename:
-							dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
 						else:
 							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
@@ -497,9 +493,18 @@ class StrmManager:
 
 					elif video == "episode" and newVideoFilename:
 						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
-						strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+
+						if fileRenaming != "original":
+							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+						else:
+							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
+
 						videoRenamed = True
 						originalPath = False
+
+				elif fileRenaming != "original" and newVideoFilename:
+					strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+					videoRenamed = True
 
 				if syncSubtitles and subtitles:
 					self.pairMediaCompanions(subtitles, videoFilename, newVideoFilename, None, dirPath, videoRenamed, originalPath, filenames, parentFolderID, subtitles=True)
@@ -558,10 +563,11 @@ class StrmManager:
 		self.cloudService.setAccount(account)
 		self.cloudService.refreshToken()
 		driveSettings = self.strmSettings["drives"][driveID]
-
 		apiCall = self.cloudService.getChanges(driveSettings["page_token"])
+
 		changes = apiCall["changes"]
 		pageToken = apiCall["newStartPageToken"]
+		strmRoot = self.strmSettings["root_path"]
 		xbmc.log("THE CHANGES ARE ", xbmc.LOGERROR)
 		xbmc.log(json.dumps(changes, sort_keys=True, indent=4), xbmc.LOGERROR)
 
@@ -572,7 +578,7 @@ class StrmManager:
 		filenames = driveSettings["filenames"]
 		folders = driveSettings["folders"]
 		newFiles = {}
-		deletedPaths = []
+		deleted = False
 
 		for change in changes:
 			file = change["file"]
@@ -599,6 +605,7 @@ class StrmManager:
 						self.deleteFile(filePath)
 
 					del filenames[fileID]
+					deleted = True
 
 					if cachedParentFolderID in dirPaths:
 						cachedDirPath, cachedRootFolderID, cachedParentFolderID = dirPaths[cachedParentFolderID]
@@ -733,7 +740,6 @@ class StrmManager:
 				)
 
 		if newFiles:
-			strmRoot = self.strmSettings["root_path"]
 
 			for folderID, files in newFiles.items():
 				folderSettings = folders[folderID]
@@ -741,7 +747,14 @@ class StrmManager:
 				parentFolderID = files["parent_folder_id"]
 				self.fileProcessor(files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID)
 
-			xbmc.executebuiltin("XBMC.UpdateLibrary(video)")
+			xbmc.executebuiltin("UpdateLibrary(video,{})".format(strmRoot))
+
+		if deleted:
+
+			if os.name == "nt":
+				strmRoot = strmRoot.replace("\\", "\\\\")
+
+			xbmc.executeJSONRPC('{"jsonrpc": "2.0", "id": 1, "method": "VideoLibrary.Clean", "params": {"showdialogs": false, "content": "video", "directory": "%s"}}' % strmRoot)
 
 		driveSettings["page_token"] = pageToken
 		self.saveStrmSettings()
@@ -850,7 +863,7 @@ class StrmManager:
 
 		if not driveSettings:
 			modes = ["Sync at set inverval", "Sync at set time"]
-			selection = self.dialog.select("Update mode", modes)
+			selection = self.dialog.select("Sync mode", modes)
 			taskDetails = {}
 
 			if selection == -1:
@@ -862,7 +875,7 @@ class StrmManager:
 
 			else:
 				taskDetails["mode"] = "schedule"
-				frequency = self.dialog.numeric(2, "Enter the time to schedule STRM updates")
+				frequency = self.dialog.numeric(2, "Enter the time to sync files")
 
 			if not frequency:
 				return

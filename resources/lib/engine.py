@@ -182,7 +182,7 @@ class ContentEngine:
 		contextMenu = [
 			(
 				"Create alias",
-				"XBMC.RunPlugin({})".format(pluginURL + "?mode=not_implemented")
+				"RunPlugin({})".format(pluginURL + "?mode=not_implemented")
 			)
 		]
 
@@ -301,7 +301,7 @@ class ContentEngine:
 
 		for folder in folders:
 			folderID = folder["id"]
-			folderName = folder["name"].encode('ascii', 'ignore')
+			folderName = folder["name"].encode("ascii", "ignore")
 
 			if driveSettings:
 				folderSettings = driveSettings["folders"].get(folderID)
@@ -312,7 +312,7 @@ class ContentEngine:
 				contextMenu = [
 					(
 						"Folders Sync Settings",
-						"XBMC.RunPlugin({})".format(
+						"RunPlugin({})".format(
 							pluginURL + "?mode=not_implemented&drive_id={}&folder_id={}&folder_name={}".format(
 								driveID, folderID if folderID else driveID, folderName
 							)
@@ -320,7 +320,7 @@ class ContentEngine:
 					),
 					(
 						"Stop Folder Sync",
-						"XBMC.RunPlugin({})".format(
+						"RunPlugin({})".format(
 							pluginURL + "?mode=not_implemented&drive_id={}&folder_id={}&folder_name={}".format(
 								driveID, folderID if folderID else driveID, folderName
 							)
@@ -332,7 +332,7 @@ class ContentEngine:
 				contextMenu = [
 					(
 						"Sync folder",
-						"XBMC.RunPlugin({})".format(
+						"RunPlugin({})".format(
 							pluginURL + "?mode=add_strm&drive_id={}&folder_id={}&folder_name={}".format(
 							driveID, folderID if folderID else driveID, folderName
 							)
@@ -749,7 +749,7 @@ class ResolutionOrder(xbmcgui.WindowDialog):
 		self.resolutions = kwargs["resolutions"]
 		addon = xbmcaddon.Addon()
 
-		mediaPath = os.path.join(addon.getAddonInfo('path'), 'resources', 'media')
+		mediaPath = os.path.join(addon.getAddonInfo("path"), "resources", "media")
 		self.blueTexture = os.path.join(mediaPath, "blue.png")
 		self.grayTexture = os.path.join(mediaPath, "gray.png")
 
