@@ -47,6 +47,7 @@ class ContentEngine:
 			"resolution_priority": self.resolutionPriority,
 			"not_implemented": self.notImplemented,
 			"accounts_cm": self.accountsContextMenu,
+			"list_shared_drives": self.listSharedDrives,
 		}
 
 		if mode == "video":
@@ -249,18 +250,10 @@ class ContentEngine:
 			"{}?mode=list_directory&drive_id={}&shared_with_me=true".format(pluginURL, driveID),
 			"[B]Shared With Me[/B]",
 		)
-
-		sharedDrives = self.cloudService.getDrives()
-
-		if sharedDrives:
-
-			for sharedDrive in sharedDrives:
-				sharedDriveID = sharedDrive["id"]
-				sharedDriveName = sharedDrive["name"]
-				self.addMenu(
-					"{}?mode=list_directory&drive_id={}&shared_drive_id={}".format(pluginURL, driveID, sharedDriveID),
-					"[B]{}[/B]".format(sharedDriveName),
-				)
+		self.addMenu(
+			"{}?mode=list_shared_drives&drive_id={}".format(pluginURL, driveID),
+			"[B]Shared Drives[/B]",
+		)
 
 		for index, accountInfo in enumerate(self.accounts[driveID]):
 			accountName = accountInfo["username"]
@@ -273,6 +266,24 @@ class ContentEngine:
 
 		xbmcplugin.setContent(self.pluginHandle, "files")
 		xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL)
+
+	def listSharedDrives(self):
+		pluginURL = sys.argv[0]
+		driveID = self.settings.getParameter("drive_id")
+		account = self.accountManager.getAccount(driveID)
+		self.cloudService.setAccount(account)
+		self.refreshAccess(account["expiry"])
+		sharedDrives = self.cloudService.getDrives()
+
+		if sharedDrives:
+
+			for sharedDrive in sharedDrives:
+				sharedDriveID = sharedDrive["id"]
+				sharedDriveName = sharedDrive["name"]
+				self.addMenu(
+					"{}?mode=list_directory&drive_id={}&shared_drive_id={}".format(pluginURL, driveID, sharedDriveID),
+					"[B]{}[/B]".format(sharedDriveName),
+				)
 
 	def listDirectory(self):
 		pluginURL = sys.argv[0]
