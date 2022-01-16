@@ -485,9 +485,9 @@ class StrmManager:
 				if folderStructure != "original" and video:
 
 					if video == "movie":
+						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
 						if fileRenaming != "original" and newVideoFilename:
-							dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
 						else:
 							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
@@ -496,7 +496,12 @@ class StrmManager:
 
 					elif video == "episode" and newVideoFilename:
 						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
-						strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+						
+						if fileRenaming != "original":
+							strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+						else:
+							strmPath = self.duplicateFileCheck(dirPath, videoFilename + ".strm")
+
 						videoRenamed = True
 						originalPath = False
 
