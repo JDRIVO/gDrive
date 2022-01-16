@@ -3,12 +3,12 @@ from threading import Thread
 import xbmc
 
 import constants
-from resources.lib import streamer, watcher
+from resources.lib import server, watcher
 
 if __name__ == "__main__":
 	monitor = xbmc.Monitor()
 	watcher = watcher.LibraryMonitor()
-	server = streamer.MyHTTPServer(constants.settings)
+	server = server.MyHTTPServer(constants.settings)
 	Thread(target=server.run, daemon=True).start()
 
 	while not monitor.abortRequested():

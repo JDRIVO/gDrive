@@ -4,6 +4,7 @@ import glob
 import json
 import time
 import urllib
+import datetime
 
 import xbmc
 import xbmcgui
@@ -12,7 +13,7 @@ import xbmcaddon
 import xbmcplugin
 
 import constants
-from . import account_manager, gdrive_api
+from . import account_manager, gdrive_api, strm_manager
 
 
 class ContentEngine:
@@ -22,111 +23,60 @@ class ContentEngine:
 		self.settings = constants.settings
 		self.accountManager = account_manager.AccountManager(self.settings)
 		self.accounts = self.accountManager.accounts
-		self.cloudService = gdrive_api.GoogleDrive()
+		self.cloudService = gdrive_api.GoogleDrive(self.accountManager)
 
 	def run(self, dbID, dbType, filePath):
 		mode = self.settings.getParameter("mode", "main").lower()
 		pluginQueries = self.settings.parseQuery(sys.argv[2][1:])
-		self.instance = pluginQueries.get("instance")
 		self.dialog = xbmcgui.Dialog()
 
+		# Temp - to be deleted in the future
+		if not self.settings.getSetting("accounts_converted"):
+			self.convertAccounts()
+
 		modes = {
+			"main": self.createMainMenu,
 			"enroll_account": self.enrollAccount,
 			"add_service_account": self.addServiceAccount,
-			"set_default_account": self.setDefaultAccount,
-			"add_fallback_account": self.addFallbackAccounts,
 			"validate_accounts": self.validateAccounts,
-			"delete_accounts": self.deleteAccounts,
-			"settings_delete_account": self.settingsDeleteAccounts,
-			"resolution_priority": self.resolutionPriority,
+			"delete_accounts": self.accountDeletion,
+			"list_accounts": self.createDriveMenu,
+			"list_directory": self.listDirectory,
+			"add_strm": self.addStrm,
 			"video": self.playVideo,
+			"resolution_priority": self.resolutionPriority,
+			"not_implemented": self.notImplemented,
+			"accounts_cm": self.accountsContextMenu,
 		}
 
-		if mode == "main" and self.instance:
-			self.createContextMenu()
-		elif mode == "main" and not self.instance:
-			self.createMenu()
-		elif mode == "video":
+		if mode == "video":
 			modes[mode](dbID, dbType, filePath)
 		else:
 			modes[mode]()
 
 		xbmcplugin.endOfDirectory(self.pluginHandle)
 
-	def addMenu(self, url, title):
-		listitem = xbmcgui.ListItem(title)
-		cm = [(self.settings.getLocalizedString(30211), "Addon.OpenSettings({})".format(self.settings.getAddonInfo("id")))]
-		listitem.addContextMenuItems(cm, True)
-		xbmcplugin.addDirectoryItem(self.pluginHandle, url, listitem)
-
-	def createMenu(self):
-		pluginURL = sys.argv[0]
-		self.addMenu(pluginURL + "?mode=enroll_account", "[B]1. {}[/B]".format(self.settings.getLocalizedString(30207)))
-		self.addMenu(pluginURL + "?mode=add_service_account", "[B]2. {}[/B]".format(self.settings.getLocalizedString(30214)))
-		self.addMenu(pluginURL + "?mode=add_fallback_account", "[B]3. {}[/B]".format(self.settings.getLocalizedString(30220)))
-		self.addMenu(pluginURL + "?mode=validate_accounts", "[B]4. {}[/B]".format(self.settings.getLocalizedString(30021)))
-		self.addMenu(pluginURL + "?mode=delete_accounts", "[B]5. {}[/B]".format(self.settings.getLocalizedString(30022)))
-
-		defaultAccountName, defaultAccountNumber = self.accountManager.getDefaultAccount()
-		fallbackAccountNames, fallbackAccountNumbers = self.accountManager.getFallbackAccounts()
-
-		for accountNumber, accountInfo in self.accounts.items():
-			accountName = accountInfo["username"]
-			instance = accountNumber
-
-			if accountNumber == defaultAccountNumber:
-				accountName = "[COLOR crimson][B]{}[/B][/COLOR]".format(accountName)
-			elif accountNumber in fallbackAccountNumbers:
-				accountName = "[COLOR deepskyblue][B]{}[/B][/COLOR]".format(accountName)
-
-			self.addMenu("{}?mode=main&instance={}".format(pluginURL, instance), accountName)
-
-		xbmcplugin.setContent(self.pluginHandle, "files")
-		xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL)
-
-	def createContextMenu(self):
+	def accountsContextMenu(self):
 		options = [
-			self.settings.getLocalizedString(30219),
 			self.settings.getLocalizedString(30002),
 			self.settings.getLocalizedString(30023),
 			self.settings.getLocalizedString(30159),
 		]
-
-		accountNumber = self.instance
-		account = self.accounts[accountNumber]
-		accountName = account["username"]
-		fallbackAccounts = self.accountManager.getFallbackAccounts()
-		fallbackAccountNames, fallbackAccountNumbers = fallbackAccounts
-
-		if accountNumber in fallbackAccountNumbers:
-			fallbackExists = True
-			options.insert(0, self.settings.getLocalizedString(30212))
-		else:
-			fallbackExists = False
-			options.insert(0, self.settings.getLocalizedString(30213))
-
+		driveID = self.settings.getParameter("drive_id")
+		accountName = self.settings.getParameter("account_name")
+		accountIndex = int(self.settings.getParameter("account_index"))
 		selection = self.dialog.contextmenu(options)
+		account = self.accounts[driveID][accountIndex]
 
 		if selection == 0:
-
-			if fallbackExists:
-				self.accountManager.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
-			else:
-				self.accountManager.addFallbackAccount(accountName, accountNumber, fallbackAccounts)
-
-		elif selection == 1:
-			self.accountManager.setDefaultAccount(accountName, accountNumber)
-
-		elif selection == 2:
 			newAccountName = self.dialog.input(self.settings.getLocalizedString(30002) + ": " + accountName)
 
 			if not newAccountName:
 				return
 
-			account["username"] = newAccountName
-			self.accountManager.renameAccount(accountName, accountNumber, newAccountName)
+			self.accountManager.renameAccount(driveID, accountIndex, newAccountName)
 
-		elif selection == 3:
+		elif selection == 1:
 			self.cloudService.setAccount(account)
 			validation = self.cloudService.refreshToken()
 
@@ -139,16 +89,13 @@ class ContentEngine:
 				if not selection:
 					return
 
-				self.accountManager.deleteAccount(accountNumber)
-
-				if accountNumber in fallbackAccountNumbers:
-					self.accountManager.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
+				self.accountManager.deleteAccount(driveID, account)
 
 			else:
 				self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30020))
 				return
 
-		elif selection == 4:
+		elif selection == 2:
 			selection = self.dialog.yesno(
 				self.settings.getLocalizedString(30000),
 				"{} {}?".format(
@@ -160,15 +107,265 @@ class ContentEngine:
 			if not selection:
 				return
 
-			self.accountManager.deleteAccount(accountNumber)
-
-			if accountNumber in fallbackAccountNumbers:
-				self.accountManager.removeFallbackAccount(accountName, accountNumber, fallbackAccounts)
+			self.accountManager.deleteAccount(driveID, account)
 
 		else:
 			return
 
 		xbmc.executebuiltin("Container.Refresh")
+
+	def refreshAccess(self, expiry):
+		accessExpiry = datetime.datetime(*(time.strptime(expiry, "%Y-%m-%d %H:%M:%S.%f")[0:6]))
+		timeNow = datetime.datetime.now()
+
+		if timeNow >= accessExpiry:
+			self.cloudService.refreshToken()
+			self.accountManager.saveAccounts()
+
+	def convertAccounts(self):
+
+		if self.accounts:
+
+			try:
+				int(self.accounts.keys()[0])
+			except:
+				pass
+
+			accounts = {}
+
+			for account, accountInfo in self.accounts.items():
+				self.cloudService.setAccount(accountInfo)
+				self.cloudService.refreshToken()
+				driveID = self.cloudService.getDriveID()
+				driveAccounts = accounts.get(driveID)
+
+				if driveAccounts:
+					driveAccounts.append(accountInfo)
+				else:
+					accounts[driveID] = [accountInfo]
+
+			self.accountManager.accounts = accounts
+			self.accountManager.saveAccounts()
+
+		self.settings.setSetting("accounts_converted", "true")
+		xbmc.executebuiltin("Container.Refresh")
+
+	def notImplemented(self):
+		self.dialog.notification("gDrive", "Not implemented")
+
+	def addMenu(self, url, title, cm=False, folder=True):
+		listitem = xbmcgui.ListItem(title)
+
+		if cm:
+			listitem.addContextMenuItems(cm, True)
+
+		xbmcplugin.addDirectoryItem(self.pluginHandle, url, listitem, isFolder=folder)
+
+	def createMainMenu(self):
+		pluginURL = sys.argv[0]
+		strmInfo = self.getStrmSettings()
+		num = 1
+
+		if strmInfo:
+			self.addMenu(
+				strmInfo["root_path"],
+				"[B]1. Browse STRM[/B]",
+				folder=True,
+			)
+			num += 1
+
+		self.addMenu(
+			pluginURL + "?mode=enroll_account",
+			"[B]{}. {}[/B]".format(num, self.settings.getLocalizedString(30207)),
+			folder=False,
+		)
+		contextMenu = [
+			(
+				"Create alias",
+				"RunPlugin({})".format(pluginURL + "?mode=not_implemented")
+			)
+		]
+
+		for driveID in self.accounts:
+			self.addMenu(
+				"{}?mode=list_accounts&drive_id={}".format(pluginURL, driveID),
+				"DRIVE: " + driveID,
+				cm=contextMenu,
+			)
+
+		xbmcplugin.setContent(self.pluginHandle, "files")
+		# xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_FILE)
+		# xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL_IGNORE_FOLDERS)
+		xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL_IGNORE_FOLDERS)
+
+	def createDriveMenu(self):
+		pluginURL = sys.argv[0]
+		driveID = self.settings.getParameter("drive_id")
+		account = self.accountManager.getAccount(driveID)
+
+		if not account:
+			return
+
+		self.cloudService.setAccount(account)
+		self.refreshAccess(account["expiry"])
+		strmSettings = self.getStrmSettings()
+
+		if strmSettings:
+			driveSettings = strmSettings["drives"].get(driveID)
+		else:
+			driveSettings = False
+
+		self.addMenu(
+			"{}?mode=add_service_account&drive_id={}".format(pluginURL, driveID),
+			"[B]1. {}[/B]".format(self.settings.getLocalizedString(30214)),
+			folder=False,
+		)
+		num = 2
+
+		if driveSettings:
+			self.addMenu(
+				pluginURL + "?mode=not_implemented",
+				"[B]{}. Sync Settings / Force Sync[/B]".format(num),
+				folder=False,
+			)
+			num += 1
+
+		self.addMenu(
+			"{}?mode=validate_accounts&drive_id={}".format(pluginURL, driveID),
+			"[B]{}. {}[/B]".format(num, self.settings.getLocalizedString(30021)),
+			folder=False,
+		)
+		num += 1
+		self.addMenu(
+			"{}?mode=delete_accounts&drive_id={}".format(pluginURL, driveID),
+			"[B]{}. {}[/B]".format(num, self.settings.getLocalizedString(30022)),
+			folder=False,
+		)
+		self.addMenu(
+			"{}?mode=list_directory&drive_id={}".format(pluginURL, driveID),
+			"[B]My Drive[/B]",
+		)
+		self.addMenu(
+			"{}?mode=list_directory&drive_id={}&shared_with_me=true".format(pluginURL, driveID),
+			"[B]Shared With Me[/B]",
+		)
+
+		sharedDrives = self.cloudService.getDrives()
+
+		if sharedDrives:
+
+			for sharedDrive in sharedDrives:
+				sharedDriveID = sharedDrive["id"]
+				sharedDriveName = sharedDrive["name"]
+				self.addMenu(
+					"{}?mode=list_directory&drive_id={}&shared_drive_id={}".format(pluginURL, driveID, sharedDriveID),
+					"[B]{}[/B]".format(sharedDriveName),
+				)
+
+		for index, accountInfo in enumerate(self.accounts[driveID]):
+			accountName = accountInfo["username"]
+			accountName = "[COLOR deepskyblue][B]{}[/B][/COLOR]".format(accountName)
+			self.addMenu(
+				"{}?mode=accounts_cm&account_name={}&account_index={}&drive_id={}".format(pluginURL, accountName, index, driveID),
+				accountName,
+				folder=False,
+			)
+
+		xbmcplugin.setContent(self.pluginHandle, "files")
+		xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL)
+
+	def listDirectory(self):
+		pluginURL = sys.argv[0]
+		driveID = self.settings.getParameter("drive_id")
+		sharedDriveID = self.settings.getParameter("shared_drive_id")
+		folderID = self.settings.getParameter("folder_id")
+		sharedWithMe = self.settings.getParameter("shared_with_me")
+
+		if not folderID:
+
+			if sharedDriveID:
+				folderID = sharedDriveID
+			else:
+				folderID = driveID
+
+		account = self.accountManager.getAccount(driveID)
+		self.cloudService.setAccount(account)
+		self.refreshAccess(account["expiry"])
+		folders = self.cloudService.listDir(folderID=folderID, sharedWithMe=sharedWithMe, foldersOnly=True)
+		strmSettings = self.getStrmSettings()
+
+		if strmSettings:
+			driveSettings = strmSettings["drives"].get(driveID)
+		else:
+			driveSettings = False
+
+		for folder in folders:
+			folderID = folder["id"]
+			folderName = folder["name"]
+
+			if driveSettings:
+				folderSettings = driveSettings["folders"].get(folderID)
+			else:
+				folderSettings = False
+
+			if folderSettings:
+				contextMenu = [
+					(
+						"Folders Sync Settings",
+						"RunPlugin({})".format(
+							pluginURL + "?mode=not_implemented&drive_id={}&folder_id={}&folder_name={}".format(
+								driveID, folderID if folderID else driveID, folderName
+							)
+						)
+					),
+					(
+						"Stop Folder Sync",
+						"RunPlugin({})".format(
+							pluginURL + "?mode=not_implemented&drive_id={}&folder_id={}&folder_name={}".format(
+								driveID, folderID if folderID else driveID, folderName
+							)
+						)
+					)
+				]
+				folderName = "[COLOR crimson][B]{}[/B][/COLOR]".format(folderName)
+			else:
+				contextMenu = [
+					(
+						"Sync folder",
+						"RunPlugin({})".format(
+							pluginURL + "?mode=add_strm&drive_id={}&folder_id={}&folder_name={}".format(
+							driveID, folderID if folderID else driveID, folderName
+							)
+						)
+					)
+				]
+
+			self.addMenu(
+				pluginURL + "?mode=list_directory&drive_id={}&folder_id={}".format(driveID, folderID),
+				folderName,
+				cm=contextMenu,
+			)
+
+		xbmcplugin.setContent(self.pluginHandle, "files")
+		xbmcplugin.addSortMethod(self.pluginHandle, xbmcplugin.SORT_METHOD_LABEL)
+
+	def addStrm(self):
+		driveID = self.settings.getParameter("drive_id")
+		folderID = self.settings.getParameter("folder_id")
+		folderName = self.settings.getParameter("folder_name")
+		serverPort = self.settings.getSettingInt("server_port", 8011)
+
+		data = "drive_id={}&folder_id={}&folder_name={}".format(driveID, folderID, folderName)
+		url = "http://localhost:{}/add_sync_task".format(serverPort)
+		req = urllib.request.Request(url, data.encode("utf-8"))
+		response = urllib.request.urlopen(req)
+		response.close()
+
+	def getStrmSettings(self):
+		strm = self.settings.getSetting("strm")
+
+		if strm:
+			return json.loads(strm)
 
 	def enrollAccount(self):
 		import socket
@@ -232,54 +429,39 @@ class ContentEngine:
 
 			return
 
-		self.accountManager.addAccount({"username": accountName, "email": email, "key": key})
-		xbmc.executebuiltin("Container.Refresh")
+		account = {
+			"username": accountName,
+			"email": email,
+			"key": key,
+			"service": True,
+		}
+		self.cloudService.setAccount(account)
+		outcome = self.cloudService.refreshToken()
 
-	def setDefaultAccount(self):
-		accountNames, accountNumbers = self.accountManager.getAccountNamesAndNumbers()
-		selection = self.dialog.select(self.settings.getLocalizedString(30120), accountNames)
-
-		if selection == -1:
+		if outcome == "failed":
 			return
 
-		self.accountManager.setDefaultAccount(accountNames[selection], accountNumbers[selection])
-
-	def addFallbackAccounts(self):
-		accountNames, accountNumbers = self.accountManager.getAccountNamesAndNumbers()
-		fallbackAccountNames, fallbackAccountNumbers = self.accountManager.getFallbackAccounts()
-
-		if fallbackAccountNumbers:
-			fallbackAccountNumbers = [accountNumbers.index(n) for n in fallbackAccountNumbers if n in accountNumbers]
-			selection = self.dialog.multiselect(
-				self.settings.getLocalizedString(30120),
-				accountNames,
-				preselect=fallbackAccountNumbers,
-			)
-		else:
-			selection = self.dialog.multiselect(self.settings.getLocalizedString(30120), accountNames)
-
-		if selection is None:
-			return
-
-		self.accountManager.setFallbackAccounts([accountNames[i] for i in selection], [accountNumbers[i] for i in selection])
+		driveID = self.settings.getParameter("drive_id")
+		self.accountManager.addAccount(account, driveID)
 		xbmc.executebuiltin("Container.Refresh")
 
 	def validateAccounts(self):
-		fallbackAccountNames, fallbackAccountNumbers = self.accountManager.getFallbackAccounts()
-		accountAmount = len(self.accounts)
+		driveID = self.settings.getParameter("drive_id")
+		accounts = self.accounts[driveID]
+		accountAmount = len(accounts)
 		pDialog = xbmcgui.DialogProgress()
 
 		pDialog.create(self.settings.getLocalizedString(30306))
-		deletion = fallbackDeletion = False
+		deletion = False
 		count = 1
 
-		for accountNumber, accountInfo in list(self.accounts.items()):
+		for accountInfo in list(accounts):
 			accountName = accountInfo["username"]
 
 			if pDialog.iscanceled():
 				return
 
-			self.cloudService.setAccount(self.accounts[accountNumber])
+			self.cloudService.setAccount(accountInfo)
 			validation = self.cloudService.refreshToken()
 			pDialog.update(int(round(count / accountAmount * 100)), accountName)
 			count += 1
@@ -293,60 +475,30 @@ class ContentEngine:
 				if not selection:
 					continue
 
-				self.accountManager.deleteAccount(accountNumber)
+				accounts.remove(accountInfo)
 				deletion = True
-
-				if accountNumber in fallbackAccountNumbers:
-					fallbackDeletion = True
-					fallbackAccountNames.remove(accountName)
-					fallbackAccountNumbers.remove(accountNumber)
 
 		pDialog.close()
 		self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30020))
 
 		if deletion:
-
-			if fallbackDeletion:
-				self.accountManager.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
-
 			xbmc.executebuiltin("Container.Refresh")
 
-	def accountDeletion(func):
+	def accountDeletion(self):
+		driveID = self.settings.getParameter("drive_id")
+		accounts = self.accounts[driveID]
+		accountNames = [accountInfo["username"] for accountInfo in accounts]
+		selection = self.dialog.multiselect(self.settings.getLocalizedString(30158), accountNames)
 
-		def wrapper(self):
-			accountNames, accountNumbers = self.accountManager.getAccountNamesAndNumbers()
-			fallbackAccountNames, fallbackAccountNumbers = self.accountManager.getFallbackAccounts()
-			selection = self.dialog.multiselect(self.settings.getLocalizedString(30158), accountNames)
-			fallbackDeletion = False
+		if not selection:
+			return
 
-			if not selection:
-				return
+		for account in selection:
+			accounts.pop(account)
 
-			for accountIndex in selection:
-				accountName = accountNames[accountIndex]
-				accountNumber = accountNumbers[accountIndex]
-				self.accountManager.deleteAccount(accountNumber)
-
-				if accountNumber in fallbackAccountNumbers:
-					fallbackDeletion = True
-					fallbackAccountNames.remove(accountName)
-					fallbackAccountNumbers.remove(accountNumber)
-
-			if fallbackDeletion:
-				self.accountManager.setFallbackAccounts(fallbackAccountNames, fallbackAccountNumbers)
-
-			func(self)
-
-		return wrapper
-
-	@accountDeletion
-	def deleteAccounts(self):
+		self.accountManager.saveAccounts()
 		self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30161))
 		xbmc.executebuiltin("Container.Refresh")
-
-	@accountDeletion
-	def settingsDeleteAccounts(self):
-		self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30160))
 
 	def resolutionPriority(self):
 		resolutions = self.settings.getSetting("resolution_priority").split(", ")
@@ -360,11 +512,6 @@ class ContentEngine:
 			self.settings.setSetting("resolution_priority", ", ".join(newOrder))
 
 	def playVideo(self, dbID, dbType, filePath):
-		defaultAccount = self.settings.getSetting("default_account")
-
-		if not defaultAccount:
-			self.dialog.ok(self.settings.getLocalizedString(30000), self.settings.getLocalizedString(30005))
-			return
 
 		if (not dbID or not dbType) and not filePath:
 			timeEnd = time.time() + 1
@@ -483,11 +630,13 @@ class ContentEngine:
 				resumeOption = True
 
 		crypto = self.settings.getParameter("encfs")
-		fileID = self.settings.getParameter("filename")
+		fileID = self.settings.getParameter("file_id") # self.settings.getParameter("filename")
+		driveID = self.settings.getParameter("drive_id")
 		driveURL = self.cloudService.constructDriveURL(fileID)
 
-		self.cloudService.setAccount(self.accounts[defaultAccount])
-		self.cloudService.refreshToken()
+		account = self.accountManager.getAccount(driveID)
+		self.cloudService.setAccount(account)
+		self.refreshAccess(account["expiry"])
 		transcoded = False
 
 		if crypto:
@@ -523,7 +672,7 @@ class ContentEngine:
 		self.accountManager.saveAccounts()
 		serverPort = self.settings.getSettingInt("server_port", 8011)
 		url = "http://localhost:{}/play_url".format(serverPort)
-		data = "encrypted={}&account={}&url={}&transcoded={}&fileid={}".format(crypto, defaultAccount, driveURL, transcoded, fileID)
+		data = "encrypted={}&url={}&driveid={}&fileid={}&transcoded={}".format(crypto, driveURL, driveID, fileID, transcoded)
 		req = urllib.request.Request(url, data.encode("utf-8"))
 
 		try:

@@ -102,8 +102,8 @@ msgid "Stream Quality"
 msgstr "Stream Quality"
 
 msgctxt "#30118"
-msgid "The following account was enrolled:"
-msgstr "The following account was enrolled:"
+msgid "The following account was added:"
+msgstr "The following account was added:"
 
 msgctxt "#30119"
 msgid "The following login error was encountered:"
@@ -138,8 +138,8 @@ msgid "Account(s) deleted."
 msgstr "Account(s) deleted."
 
 msgctxt "#30207"
-msgid "Enroll account"
-msgstr "Enroll account"
+msgid "Add account"
+msgstr "Add account"
 
 msgctxt "#30208"
 msgid "No encryption settings found. Please update your encryption information in the gDrive settings."
