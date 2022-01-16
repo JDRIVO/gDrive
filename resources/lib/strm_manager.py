@@ -43,11 +43,11 @@ WINDOWS_PROHIBITED_CHARS = (
 )
 
 LINUX_PROHIBITED_CHARS = (
-	"\\",
+	"/",
 )
 
 OSX_PROHIBITED_CHARS = (
-	"\\",
+	"/",
 	":",
 )
 
