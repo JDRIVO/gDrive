@@ -743,7 +743,7 @@ class ResolutionOrder(xbmcgui.WindowDialog):
 		self.resolutions = kwargs["resolutions"]
 		addon = xbmcaddon.Addon()
 
-		mediaPath = os.path.join(addon.getAddonInfo('path'), 'resources', 'media')
+		mediaPath = os.path.join(addon.getAddonInfo("path"), "resources", "media")
 		self.blueTexture = os.path.join(mediaPath, "blue.png")
 		self.grayTexture = os.path.join(mediaPath, "gray.png")
 

@@ -478,10 +478,6 @@ class StrmManager:
 					video = "movie"
 					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
 
-				if fileRenaming != "original" and newVideoFilename:
-					strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
-					videoRenamed = True
-
 				if folderStructure != "original" and video:
 
 					if video == "movie":
@@ -504,6 +500,10 @@ class StrmManager:
 
 						videoRenamed = True
 						originalPath = False
+
+				elif fileRenaming != "original" and newVideoFilename:
+					strmPath = self.duplicateFileCheck(dirPath, newVideoFilename + ".strm")
+					videoRenamed = True
 
 				if syncSubtitles and subtitles:
 					self.pairMediaCompanions(subtitles, videoFilename, newVideoFilename, None, dirPath, videoRenamed, originalPath, filenames, parentFolderID, subtitles=True)
