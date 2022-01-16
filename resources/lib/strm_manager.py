@@ -740,7 +740,7 @@ class StrmManager:
 				parentFolderID = files["parent_folder_id"]
 				self.fileProcessor(files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID)
 
-			xbmc.executebuiltin("XBMC.UpdateLibrary(video)")
+			xbmc.executebuiltin("UpdateLibrary(video)")
 
 		driveSettings["page_token"] = pageToken
 		self.saveStrmSettings()
