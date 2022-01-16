@@ -559,7 +559,7 @@ class StrmManager:
 					self.pairMediaCompanions(nfos, videoFilename, newVideoFilename, ".nfo", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
 
 			if not strmPath:
-				strmPath = self.generateFilePath(remotePath, videoFilename + ".strm")
+				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 			self.createStrm(dirPath, strmPath, strmContent)
 
@@ -912,7 +912,7 @@ class StrmManager:
 
 			if selection == 0:
 				taskDetails["mode"] = "interval"
-				frequency = self.dialog.numeric(0, "Enter the interval in minutes")
+				frequency = self.dialog.numeric(0, "Enter the sync interval in minutes")
 
 			else:
 				taskDetails["mode"] = "schedule"
