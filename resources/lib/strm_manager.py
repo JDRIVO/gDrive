@@ -360,25 +360,21 @@ class StrmManager:
 		if not os.path.exists(dirPath):
 			os.makedirs(dirPath)
 
-	def rename(self, strmRoot, oldPath, dirPath, newName, file=True):
+	def renameFile(self, strmRoot, oldPath, dirPath, newName):
 
 		if os.path.exists(oldPath):
-
-			if dirPath:
-				self.createDirs(dirPath)
-
 			newPath = self.duplicateFileCheck(dirPath, newName)
 			shutil.move(oldPath, newPath)
-
-			if file:
-				self.deleteEmptyDirs(os.path.dirname(oldPath), strmRoot)
-			else:
-				self.deleteEmptyDirs(oldPath, strmRoot)
-
+			self.deleteEmptyDirs(os.path.dirname(oldPath), strmRoot)
 			return newPath
-
 		else:
 			return "File not found"
+
+	def renameFolder(self, strmRoot, oldPath, newPath):
+		self.createDirs(newPath)
+		shutil.move(oldPath, newPath)
+		self.deleteEmptyDirs(oldPath, strmRoot)
+		return newPath
 
 	def pairMediaCompanions(self, mediaExtras, videoFilename, newVideoFilename, fileExtension, dirPath, videoRenamed, originalPath, fileCache, folderID, subtitles=False):
 
@@ -688,7 +684,8 @@ class StrmManager:
 							dirPath, folderID = self.getDirectory(dirPaths, fileID)
 
 							if dirPath:
-								newDirPath = self.rename(strmRoot, cachedDirPath, dirPath, filename, file=False)
+								newDirPath = os.path.join(dirPath, filename)
+								outcome = self.renameFolder(strmRoot, cachedDirPath, newDirPath)
 								dirPaths[fileID] = newDirPath, folderID, parentFolderID
 							else:
 								# Folder moved to another root folder != existing root folder - delete current folder
@@ -696,7 +693,8 @@ class StrmManager:
 								pass
 
 						elif dirName != filename:
-							newDirPath = self.rename(strmRoot, cachedDirPath, dirName, filename, file=False)
+							newDirPath = os.path.join(dirName, filename)
+							outcome = self.renameFolder(strmRoot, cachedDirPath, newDirPath)
 							dirPaths[fileID][0] = newDirPath
 
 						continue
@@ -732,7 +730,7 @@ class StrmManager:
 								fileExtension = os.path.splitext(cachedFile)[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								newFilePath = self.rename(strmRoot, cachedFilePath, dirPath, newFilename)
+								newFilePath = self.renameFile(strmRoot, cachedFilePath, dirPath, newFilename)
 
 								if newFilePath == "File not found":
 									del filenames[fileID]
@@ -744,7 +742,7 @@ class StrmManager:
 								fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								newFilePath = self.rename(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
+								newFilePath = self.renameFile(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
 
 								if newFilePath == "File not found":
 									del filenames[fileID]
