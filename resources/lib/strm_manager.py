@@ -688,7 +688,7 @@ class StrmManager:
 							dirPath, folderID = self.getDirectory(dirPaths, fileID)
 
 							if dirPath:
-								renameFolder = self.rename(strmRoot, cachedDirPath, dirPath, filename, file=False)
+								newDirPath = self.rename(strmRoot, cachedDirPath, dirPath, filename, file=False)
 								dirPaths[fileID] = newDirPath, folderID, parentFolderID
 							else:
 								# Folder moved to another root folder != existing root folder - delete current folder
@@ -696,7 +696,7 @@ class StrmManager:
 								pass
 
 						elif dirName != filename:
-							renameFolder = self.rename(strmRoot, cachedDirPath, dirName, filename, file=False)
+							newDirPath = self.rename(strmRoot, cachedDirPath, dirName, filename, file=False)
 							dirPaths[fileID][0] = newDirPath
 
 						continue
