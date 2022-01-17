@@ -375,6 +375,8 @@ class StrmManager:
 			else:
 				self.deleteEmptyDirs(oldPath, strmRoot)
 
+			return newPath
+
 		else:
 			return "File not found"
 
@@ -730,9 +732,9 @@ class StrmManager:
 								fileExtension = os.path.splitext(cachedFile)[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								outcome = self.rename(strmRoot, cachedFilePath, dirPath, newFilename)
+								newFilePath = self.rename(strmRoot, cachedFilePath, dirPath, newFilename)
 
-								if outcome == "File not found":
+								if newFilePath == "File not found":
 									del filenames[fileID]
 								else:
 									filenames[fileID] = [newFilename, filename, parentFolderID, mode, folderStructure]
@@ -742,9 +744,9 @@ class StrmManager:
 								fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								outcome = self.rename(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
+								newFilePath = self.rename(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
 
-								if outcome == "File not found":
+								if newFilePath == "File not found":
 									del filenames[fileID]
 								else:
 									filenames[fileID][0] = newFilePath
