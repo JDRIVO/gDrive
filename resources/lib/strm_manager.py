@@ -673,7 +673,7 @@ class StrmManager:
 
 					else:
 						cachedDirPath, cachedRootFolderID, cachedParentFolderID = dirPaths[fileID]
-						dirName = cachedDirPath.split(os.sep)[-1]
+						cachedDirPathHead, dirName = cachedDirPath.rsplit(os.sep, 1)
 
 						if parentFolderID != cachedParentFolderID and fileID != cachedRootFolderID:
 							del dirPaths[fileID]
@@ -695,7 +695,7 @@ class StrmManager:
 								# del dirPaths[fileID]
 								# Delete all cached items
 							else:
-								newDirPath = os.path.join(dirName, filename)
+								newDirPath = os.path.join(cachedDirPathHead, filename)
 								self.renameFolder(strmRoot, cachedDirPath, newDirPath)
 								dirPaths[fileID][0] = newDirPath
 
@@ -729,7 +729,7 @@ class StrmManager:
 						if mode == "rename&delete":
 
 							if folderStructure == "original":
-								
+
 								if not os.path.exists(cachedFilePath):
 									del filenames[fileID]
 								else:
