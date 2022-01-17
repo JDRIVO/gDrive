@@ -299,11 +299,6 @@ class StrmManager:
 
 		return filePath
 
-	def createDirs(self, dirPath):
-
-		if not os.path.exists(dirPath):
-			os.makedirs(dirPath)
-
 	def createStrm(self, dirPath, strmPath, contents):
 		self.createDirs(dirPath)
 
@@ -329,7 +324,6 @@ class StrmManager:
 			try:
 				dirName, folderID = self.cloudService.getDirectory(folderID)
 			except KeyError:
-				xbmc.log("GET DIRECTORY - KEY ERROR", xbmc.LOGERROR)
 				return None, None
 
 			existingPath = dirPaths.get(folderID)
@@ -342,37 +336,44 @@ class StrmManager:
 		return dirPath, dirPaths[folderID][1]
 
 	@staticmethod
-	def deleteFile(filePath):
+	def deleteEmptyDirs(dirPath, strmRoot):
+
+		while dirPath != strmRoot and os.path.exists(dirPath) and not os.listdir(dirPath):
+			os.rmdir(dirPath)
+			dirPath = dirPath.rsplit(os.sep, 1)[0]
+
+	def deleteFile(self, strmRoot, filePath=None, dirPath=None, filename=None):
+
+		if not filePath:
+			filePath = os.path.join(dirPath, filename)
+		else:
+			dirPath, filename = os.path.split(filePath)
 
 		if os.path.exists(filePath):
 			os.remove(filePath)
 
-		directory = os.path.dirname(filePath)
+		self.deleteEmptyDirs(dirPath, strmRoot)
 
-		try:
-			if not os.listdir(directory):
-				os.rmdir(directory)
-		except:
-			# directory doesn't exist
-			return
+	@staticmethod
+	def createDirs(dirPath):
 
-	def rename(self, oldPath, newPath, dirPath=False):
+		if not os.path.exists(dirPath):
+			os.makedirs(dirPath)
+
+	def rename(self, strmRoot, oldPath, dirPath, newName, file=True):
 
 		if os.path.exists(oldPath):
 
 			if dirPath:
 				self.createDirs(dirPath)
 
+			newPath = self.duplicateFileCheck(dirPath, newName)
 			shutil.move(oldPath, newPath)
 
-			directory = os.path.dirname(oldPath)
-
-			try:
-				if not os.listdir(directory):
-					os.rmdir(directory)
-			except:
-				# directory doesn't exist
-				return
+			if file:
+				self.deleteEmptyDirs(os.path.dirname(oldPath), strmRoot)
+			else:
+				self.deleteEmptyDirs(oldPath, strmRoot)
 
 		else:
 			return "File not found"
@@ -486,8 +487,8 @@ class StrmManager:
 			videoFilename = os.path.splitext(filename)[0]
 			fileID = videoFile["id"]
 			videoMetadata = videoFile["metadata"]
-
 			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
+
 			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
 			dirPath = remotePath
 			newVideoFilename = videoRenamed = strmPath = False
@@ -516,19 +517,19 @@ class StrmManager:
 					video = "movie"
 					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
 
-				if folderStructure != "original" and video:
+				if folderStructure != "original" and newVideoFilename:
 
 					if video == "movie":
 						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
 
-						if fileRenaming != "original" and newVideoFilename:
+						if fileRenaming != "original":
 							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
 						else:
 							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 						originalPath = False
 
-					elif video == "episode" and newVideoFilename:
+					elif video == "episode":
 						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
 
 						if fileRenaming != "original":
@@ -577,7 +578,9 @@ class StrmManager:
 					params = [os.path.basename(strmPath), filename, parentFolderID, "rename&delete", "original"]
 
 			filenames[fileID] = params
-			fileIDs.append(fileID)
+
+			if fileID not in fileIDs:
+				fileIDs.append(fileID)
 
 		unaccountedFiles = []
 
@@ -636,13 +639,12 @@ class StrmManager:
 			if file["trashed"]:
 
 				if fileID in filenames:
-					cachedFile, cachedFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
+					cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
 
-					if folderStructure == "modified":
-						self.deleteFile(cachedFile)
+					if folderStructure == "original":
+						self.deleteFile(strmRoot, dirPath=dirPaths[parentFolderID][0], filename=cachedFile)
 					else:
-						filePath = os.path.join(dirPaths[parentFolderID][0], os.path.basename(cachedFile))
-						self.deleteFile(filePath)
+						self.deleteFile(strmRoot, filePath=cachedFile)
 
 					del filenames[fileID]
 					deleted = True
@@ -684,8 +686,7 @@ class StrmManager:
 							dirPath, folderID = self.getDirectory(dirPaths, fileID)
 
 							if dirPath:
-								newDirPath = os.path.join(dirPath, filename)
-								renameFolder = self.rename(cachedDirPath, newDirPath)
+								renameFolder = self.rename(strmRoot, cachedDirPath, dirPath, filename, file=False)
 								dirPaths[fileID] = newDirPath, folderID, parentFolderID
 							else:
 								# Folder moved to another root folder != existing root folder - delete current folder
@@ -693,8 +694,7 @@ class StrmManager:
 								pass
 
 						elif dirName != filename:
-							newDirPath = os.path.join(dirName, filename)
-							renameFolder = self.rename(cachedDirPath, newDirPath)
+							renameFolder = self.rename(strmRoot, cachedDirPath, dirName, filename, file=False)
 							dirPaths[fileID][0] = newDirPath
 
 						continue
@@ -711,16 +711,16 @@ class StrmManager:
 						dirPath, folderID, cachedParentFolderID = dirPaths[parentFolderID]
 
 				if fileID in filenames:
-					cachedFile, cachedFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
+					cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
 
 					if folderStructure == "original":
 						cachedFilePath = os.path.join(dirPaths[cachedParentFolderID][0], cachedFile)
 					else:
 						cachedFilePath = cachedFile
 
-					if cachedFilename == filename and os.path.join(dirPaths[cachedParentFolderID][0]) == dirPath:
+					if cachedOriginalFilename == filename and dirPaths[cachedParentFolderID][0] == dirPath:
 						# this needs to be done as GDRIVE creates multiple changes for a file, one before its metadata is processed and another change after the metadata is processed
-						self.deleteFile(cachedFilePath)
+						self.deleteFile(strmRoot, filePath=cachedFilePath)
 						del filenames[fileID]
 					else:
 
@@ -730,8 +730,7 @@ class StrmManager:
 								fileExtension = os.path.splitext(cachedFile)[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								newFilePath = os.path.join(dirPath, newFilename)
-								outcome = self.rename(cachedFilePath, newFilePath, dirPath)
+								outcome = self.rename(strmRoot, cachedFilePath, dirPath, newFilename)
 
 								if outcome == "File not found":
 									del filenames[fileID]
@@ -743,8 +742,7 @@ class StrmManager:
 								fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
 								filenameWithoutExt = os.path.splitext(filename)[0]
 								newFilename = filenameWithoutExt + fileExtension
-								newFilePath = os.path.join(os.path.dirname(cachedFile), newFilename)
-								outcome = self.rename(cachedFilePath, newFilePath)
+								outcome = self.rename(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
 
 								if outcome == "File not found":
 									del filenames[fileID]
@@ -753,7 +751,7 @@ class StrmManager:
 									continue
 
 						else:
-							self.deleteFile(cachedFilePath)
+							self.deleteFile(strmRoot, filePath=cachedFilePath)
 							del filenames[fileID]
 
 				metaData = file.get("videoMediaMetadata")

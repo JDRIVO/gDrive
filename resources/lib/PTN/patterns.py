@@ -245,11 +245,11 @@ patterns["audio"] = get_channel_audio_options(
 ) + [
     ("7.1(?:{d}?ch(?:annel)?(?:{d}?Audio)?)?".format(d=delimiters), "7.1"),
     ("5.1(?:{d}?ch(?:annel)?(?:{d}?Audio)?)?".format(d=delimiters), "5.1"),
-    ("MP3", None, "upper"),
-    ("2.0(?:{d}?ch(?:annel)?(?:{d}?Audio)?)?|2CH|stereo".format(d=delimiters), "Dual"),
-    ("1{d}?Ch(?:annel)?(?:{d}?Audio)?".format(d=delimiters), "Mono"),
-    ("(?:Original|Org)" + delimiters + "Aud(?:io)?", "Original"),
-    ("LiNE", "LiNE"),
+    # ("MP3", None, "upper"),
+    ("2.[01](?:{d}?ch(?:annel)?(?:{d}?Audio)?)?|2CH|stereo".format(d=delimiters), "2.0"),
+    ("1{d}?Ch(?:annel)?(?:{d}?Audio)?".format(d=delimiters), "1.0"),
+    # ("(?:Original|Org)" + delimiters + "Aud(?:io)?", "Original"),
+    # ("LiNE", "LiNE"),
 ]
 patterns["region"] = ("R[0-9]", None, "upper")
 patterns["extended"] = "(EXTENDED(:?.CUT)?)"
