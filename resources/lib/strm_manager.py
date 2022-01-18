@@ -9,9 +9,11 @@ import urllib
 import difflib
 import datetime
 from threading import Thread
+from sqlite3 import dbapi2 as sqlite
 
 import xbmc
 import xbmcgui
+import xbmcvfs
 
 from . import gdrive_api
 from .PTN.parse import PTN
@@ -87,6 +89,34 @@ class StrmManager:
 
 	def saveStrmSettings(self):
 		self.settings.setSetting("strm", json.dumps(self.strmSettings))
+
+	def updateLibrary(self, filePath, metadata):
+		dirPath, filename = os.path.split(filePath)
+		selectStatement = "SELECT idFile FROM files WHERE idPath=(SELECT idPath FROM path WHERE strPath='{}') AND strFilename='{}'".format(dirPath + os.sep, filename)
+		dbPath = xbmcvfs.translatePath(self.settings.getSetting("video_db"))
+
+		db = sqlite.connect(dbPath)
+		query = list(db.execute(selectStatement))
+		db.close()
+
+		if not query:
+			return
+
+		fileID = query[0][0]
+		videoDuration = float(metadata["durationMillis"]) / 1000
+		videoWidth = metadata["width"]
+		videoHeight = metadata["height"]
+		aspectRatio = float(videoWidth) / videoHeight
+
+		p1 = "INSERT INTO streamdetails (iVideoWidth, iVideoHeight, fVideoAspect, iVideoDuration, idFile, iStreamType)"
+		p2 = "SELECT '{}', '{}', '{}', '{}', {}, '0'".format(videoWidth, videoHeight, aspectRatio, videoDuration, fileID)
+		p3 = "WHERE NOT EXISTS (SELECT 1 FROM streamdetails WHERE iVideoWidth='{}' AND iVideoHeight='{}' AND fVideoAspect='{}' AND iVideoDuration='{}' AND idFile='{}' AND iStreamType='0')".format(videoWidth, videoHeight, aspectRatio, videoDuration, fileID)
+
+		insertStatement = "{} {} {}".format(p1, p2, p3)
+		db = sqlite.connect(dbPath)
+		db.execute(insertStatement)
+		db.commit()
+		db.close()
 
 	@staticmethod
 	def identifyFile(filename, fileExtension, mimeType):
@@ -274,7 +304,7 @@ class StrmManager:
 	def removeProhibitedFSchars(filename):
 		platform = sys.platform
 
-		if platform == "linux" or platform == "linux2":
+		if platform.startswith("linux"):
 			prohibited = LINUX_PROHIBITED_CHARS
 		elif platform == "darwin":
 			prohibited = OSX_PROHIBITED_CHARS
@@ -481,6 +511,7 @@ class StrmManager:
 			videoFilename = os.path.splitext(filename)[0]
 			fileID = videoFile["id"]
 			videoMetadata = videoFile["metadata"]
+			metadataRefresh = videoFile.get("metadata_refresh")
 			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
 
 			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
@@ -556,6 +587,9 @@ class StrmManager:
 				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
 			self.createStrm(dirPath, strmPath, strmContent)
+
+			if metadataRefresh:
+				self.updateLibrary(strmPath, videoMetadata)
 
 			if videoRenamed:
 
@@ -656,6 +690,7 @@ class StrmManager:
 			else:
 				fileExtension = file.get("fileExtension")
 				fileType = self.identifyFile(filename, fileExtension, mimeType)
+				metadataRefresh = False
 
 				if not fileType:
 					continue
@@ -724,6 +759,7 @@ class StrmManager:
 						# this needs to be done as GDRIVE creates multiple changes for a file, one before its metadata is processed and another change after the metadata is processed
 						self.deleteFile(strmRoot, filePath=cachedFilePath)
 						del filenames[fileID]
+						metadataRefresh = True
 					else:
 
 						if mode == "rename&delete":
@@ -777,7 +813,8 @@ class StrmManager:
 						"directory_path": dirPath,
 						"filename": filename,
 						"id": fileID,
-						"metadata": metaData
+						"metadata": metaData,
+						"metadata_refresh": metadataRefresh,
 					}
 				)
 
