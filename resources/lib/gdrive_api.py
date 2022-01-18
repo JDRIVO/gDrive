@@ -185,6 +185,7 @@ class GoogleDrive:
 				drives += response["drives"]
 				return drives
 			else:
+				drives += response["drives"]
 				params["pageToken"] = pageToken
 
 	def getDriveID(self):
@@ -254,6 +255,7 @@ class GoogleDrive:
 				files += response["files"]
 				return files
 			else:
+				files += response["files"]
 				params["pageToken"] = pageToken
 
 	def getPageToken(self):

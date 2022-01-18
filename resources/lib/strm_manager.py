@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import html
 import json
 import math
 import time
@@ -142,7 +143,7 @@ class StrmManager:
 				return "fanart"
 
 		elif fileExtension in SUBTITLES:
-			return"subtitles"
+			return "subtitles"
 
 	def getGDriveFiles(self, folderID, path, files):
 		remoteFiles = self.cloudService.listDir(folderID)
@@ -239,6 +240,7 @@ class StrmManager:
 
 		if tmdbResult:
 			tmdbTitle, tmdbYear = tmdbResult[0]
+			tmdbTitle = html.unescape(tmdbTitle)
 			titleSimilarity = difflib.SequenceMatcher(None, title.lower(), tmdbTitle.lower()).ratio()
 
 			if titleSimilarity > 0.85:
@@ -252,8 +254,29 @@ class StrmManager:
 
 		if season < 10:
 			season = "0" + str(season)
-		if episode < 10:
-			episode = "0" + str(episode)
+		else:
+			season = str(season)
+
+		if isinstance(episode, int):
+
+			if episode < 10:
+				episode = "0" + str(episode)
+
+		else:
+			modifiedEpisode = ""
+
+			for e in episode:
+				if e < 10:
+					append = "0" + str(e)
+				else:
+					append = e
+
+				if e != episode[-1]:
+					modifiedEpisode += "{}-".format(append)
+				else:
+					modifiedEpisode += str(append)
+
+			episode = modifiedEpisode
 
 		title = self.getTMDBtitle("episode", title, year)
 
@@ -301,7 +324,7 @@ class StrmManager:
 			f.write(file)
 
 	@staticmethod
-	def removeProhibitedFSchars(filename):
+	def removeProhibitedFSchars(name):
 		platform = sys.platform
 
 		if platform.startswith("linux"):
@@ -311,7 +334,7 @@ class StrmManager:
 		elif platform == "win32":
 			prohibited = WINDOWS_PROHIBITED_CHARS
 
-		return "".join([chr for chr in filename if chr not in prohibited])
+		return "".join([chr for chr in name if chr not in prohibited])
 
 	def generateFilePath(self, dirPath, filename):
 		filename = self.removeProhibitedFSchars(filename)
@@ -555,7 +578,7 @@ class StrmManager:
 						originalPath = False
 
 					elif video == "episode":
-						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
+						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", self.removeProhibitedFSchars(videoTitle), "Season " + videoSeason)
 
 						if fileRenaming != "original":
 							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
@@ -1004,7 +1027,7 @@ class StrmManager:
 			"sync_artwork": syncArtwork,
 			"sync_nfo": syncNFOs,
 			"sync_subtitles": syncSubtitles,
-			"root_path": os.path.join(gdriveRoot, driveID, folderName)
+			"root_path": os.path.join(gdriveRoot, driveID, folderName),
 		}
 
 		self.cloudService = gdrive_api.GoogleDrive(self.accountManager)
