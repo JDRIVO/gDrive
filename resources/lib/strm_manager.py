@@ -33,7 +33,7 @@ SUBTITLES = (
 	"smi",
 )
 
-WINDOWS_PROHIBITED_CHARS = (
+FS_PROHIBITED_CHARS = (
 	"<",
 	">",
 	"/",
@@ -43,15 +43,6 @@ WINDOWS_PROHIBITED_CHARS = (
 	":",
 	"|",
 	'"',
-)
-
-LINUX_PROHIBITED_CHARS = (
-	"/",
-)
-
-OSX_PROHIBITED_CHARS = (
-	"/",
-	":",
 )
 
 
@@ -240,14 +231,17 @@ class StrmManager:
 
 		if tmdbResult:
 			tmdbTitle, tmdbYear = tmdbResult[0]
-			tmdbTitle = html.unescape(tmdbTitle)
-			titleSimilarity = difflib.SequenceMatcher(None, title.lower(), tmdbTitle.lower()).ratio()
+			tmdbTitle = self.removeProhibitedFSchars(html.unescape(tmdbTitle))
+			titleLowerCase = title.lower()
+			tmdbTitleLowerCase = tmdbTitle.lower()
+			title = title.lower()
+			titleSimilarity = difflib.SequenceMatcher(None, titleLowerCase, tmdbTitleLowerCase).ratio()
 
 			if titleSimilarity > 0.85:
 				return tmdbTitle, tmdbYear
-			elif tmdbTitle in title:
+			elif tmdbTitleLowerCase in titleLowerCase:
 				return tmdbTitle, tmdbYear
-			elif title in tmdbTitle:
+			elif titleLowerCase in tmdbTitleLowerCase:
 				return tmdbTitle, tmdbYear
 
 	def cleanUpEpisodeTitle(self, title, year, season, episode):
@@ -301,7 +295,7 @@ class StrmManager:
 		for file in list(files):
 			fileID = file["id"]
 			filename = file["filename"]
-			filePath = self.generateFilePath(dirPath, filename)
+			filePath = self.generateFilePath(dirPath, self.removeProhibitedFSchars(filename))
 			self.downloadFile(dirPath, filePath, fileID)
 			filenames[fileID] = [
 				filename,
@@ -325,19 +319,9 @@ class StrmManager:
 
 	@staticmethod
 	def removeProhibitedFSchars(name):
-		platform = sys.platform
-
-		if platform.startswith("linux"):
-			prohibited = LINUX_PROHIBITED_CHARS
-		elif platform == "darwin":
-			prohibited = OSX_PROHIBITED_CHARS
-		elif platform == "win32":
-			prohibited = WINDOWS_PROHIBITED_CHARS
-
-		return "".join([chr for chr in name if chr not in prohibited])
+		return "".join([chr for chr in name if chr not in FS_PROHIBITED_CHARS])
 
 	def generateFilePath(self, dirPath, filename):
-		filename = self.removeProhibitedFSchars(filename)
 		return self.duplicateFileCheck(dirPath, filename)
 
 	@staticmethod
@@ -428,38 +412,37 @@ class StrmManager:
 	def pairMediaCompanions(self, mediaExtras, videoFilename, newVideoFilename, fileExtension, dirPath, videoRenamed, originalPath, fileCache, folderID, subtitles=False):
 
 		for mediaExtra in list(mediaExtras):
-			filename = mediaExtra["filename"]
+			filename = self.removeProhibitedFSchars(mediaExtra["filename"])
 
 			if videoFilename in filename:
 				fileID = mediaExtra["id"]
 
-				if newVideoFilename:
+				if videoRenamed:
 
 					if subtitles:
 						newFilename, fileExtension = os.path.splitext(filename)
 						newFilename = newFilename.replace(videoFilename, "").lstrip()
-						newFilename = "{} {}{}".format(newVideoFilename, newFilename, fileExtension)
+						newFilename = "{}{}{}".format(newVideoFilename, newFilename, fileExtension)
 					else:
 						newFilename = newVideoFilename + fileExtension
 
-				filePath = self.generateFilePath(dirPath, newFilename)
-				self.downloadFile(dirPath, filePath, fileID)
-				mediaExtras.remove(mediaExtra)
+					filePath = self.generateFilePath(dirPath, newFilename)
 
-				if videoRenamed:
-
-					if not originalPath:
-						params = [filePath, filename, folderID, "delete", "modified"]
-					else:
+					if originalPath:
 						params = [filePath, filename, folderID, "delete", "original"]
+					else:
+						params = [filePath, filename, folderID, "delete", "modified"]
 
 				else:
+					filePath = self.generateFilePath(dirPath, filename)
 
-					if not originalPath:
-						params = [filePath, filename, folderID, "delete", "modified"]
+					if originalPath:
+						params = [filePath, filename, folderID, "rename&delete", "original"]
 					else:
-						params = [filePath, filename, folderID, "delete", "original"]
+						params = [filePath, filename, folderID, "rename&delete", "modified"]
 
+				self.downloadFile(dirPath, filePath, fileID)
+				mediaExtras.remove(mediaExtra)
 				fileCache[fileID] = params
 
 	def getVideoInfo(self, filename, metaData):
@@ -525,7 +508,7 @@ class StrmManager:
 
 		videoTotal = len(videoFiles)
 		subtitles = files.get("subtitles")
-		fanarts = files.get("fanart")
+		fanart = files.get("fanart")
 		posters = files.get("poster")
 		nfos = files.get("nfo")
 
@@ -536,6 +519,7 @@ class StrmManager:
 			videoMetadata = videoFile["metadata"]
 			metadataRefresh = videoFile.get("metadata_refresh")
 			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
+			videoFilename = self.removeProhibitedFSchars(videoFilename)
 
 			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
 			dirPath = remotePath
@@ -549,12 +533,11 @@ class StrmManager:
 				videoEpisode = videoInfo.get("episode")
 				video = False
 
-				if videoEpisode and videoSeason and videoTitle:
+				if videoEpisode is not None and videoSeason is not None and videoTitle:
 					video = "episode"
 					showCleanedUp = self.cleanUpEpisodeTitle(videoTitle, videoYear, videoSeason, videoEpisode)
 
 					if showCleanedUp:
-						videoEpisode = showCleanedUp["episode"]
 						videoSeason = showCleanedUp["season"]
 						videoTitle = showCleanedUp["title"]
 						newVideoFilename = showCleanedUp["filename"]
@@ -572,21 +555,20 @@ class StrmManager:
 
 						if fileRenaming != "original":
 							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
+							videoRenamed = True
 						else:
 							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
-						originalPath = False
-
 					elif video == "episode":
-						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", self.removeProhibitedFSchars(videoTitle), "Season " + videoSeason)
+						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
 
 						if fileRenaming != "original":
 							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
+							videoRenamed = True
 						else:
 							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
-						videoRenamed = True
-						originalPath = False
+					originalPath = False
 
 				elif fileRenaming != "original" and newVideoFilename:
 					strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
@@ -597,8 +579,8 @@ class StrmManager:
 
 				if syncArtwork:
 
-					if fanarts:
-						self.pairMediaCompanions(fanarts, videoFilename, newVideoFilename, "-fanart.jpg", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
+					if fanart:
+						self.pairMediaCompanions(fanart, videoFilename, newVideoFilename, "-fanart.jpg", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
 
 					if posters:
 						self.pairMediaCompanions(posters, videoFilename, newVideoFilename, "-poster.jpg", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
@@ -638,10 +620,10 @@ class StrmManager:
 		if syncSubtitles and subtitles:
 			unaccountedFiles += subtitles
 
-		if syncArtwork and (fanarts or posters):
+		if syncArtwork and (fanart or posters):
 
-			if fanarts:
-				unaccountedFiles += fanarts
+			if fanart:
+				unaccountedFiles += fanart
 
 			if posters:
 				unaccountedFiles += posters
