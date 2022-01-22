@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import html
 import json
 import math
@@ -16,7 +15,7 @@ import xbmc
 import xbmcgui
 import xbmcvfs
 
-from . import gdrive_api
+from . import encryption, gdrive_api
 from .PTN.parse import PTN
 
 SUBTITLES = (
@@ -31,6 +30,17 @@ SUBTITLES = (
 	"sbv",
 	"stl",
 	"smi",
+)
+
+VIDEO_FILE_EXTENSIONS = (
+	"mpg",
+	"mp2",
+	"mpeg",
+	"mpe",
+	"mpv",
+	"avi",
+	"mov",
+	"mkv",
 )
 
 FS_PROHIBITED_CHARS = (
@@ -70,6 +80,11 @@ class StrmManager:
 		for driveID, driveSettings in self.strmSettings["drives"].items():
 			taskDetails = driveSettings["task_details"]
 			self.spawnTask(taskDetails, driveID)
+
+	def loadEncryption(self):
+		saltFile = self.settings.getSetting("crypto_salt")
+		saltPassword = self.settings.getSetting("crypto_password")
+		self.encryption = encryption.Encryption(saltFile, saltPassword)
 
 	def loadStrmSettings(self):
 		strmSettings = self.settings.getSetting("strm")
@@ -121,7 +136,7 @@ class StrmManager:
 
 		fileExtension = fileExtension.lower()
 
-		if "video" in mimeType:
+		if "video" in mimeType or fileExtension in VIDEO_FILE_EXTENSIONS:
 			return "video"
 		elif fileExtension == "nfo":
 			return "nfo"
@@ -135,8 +150,31 @@ class StrmManager:
 
 		elif fileExtension in SUBTITLES:
 			return "subtitles"
+		elif fileExtension == "strm":
+			return "strm"
 
-	def getGDriveFiles(self, folderID, path, files):
+	@staticmethod
+	def createFolderDic(parentFolderID, remotePath):
+		return {
+			"parent_folder_id": parentFolderID,
+			"remote_path": remotePath,
+			"files": {
+				"strm": [],
+				"video": [],
+				"subtitles": [],
+				"nfo": [],
+				"fanart": [],
+				"posters": [],
+			}
+		}
+
+	def decryptFilename(self, filename):
+		decryptedFilename = self.encryption.decryptString(filename)
+
+		if decryptedFilename:
+			return decryptedFilename.decode("utf-8")
+
+	def getGDriveFiles(self, folderID, path, files, encrypted):
 		remoteFiles = self.cloudService.listDir(folderID)
 
 		for file in remoteFiles:
@@ -144,44 +182,43 @@ class StrmManager:
 			filename = file["name"]
 			mimeType = file["mimeType"]
 			fileExtension = file.get("fileExtension")
+
+			if encrypted and mimeType == "application/octet-stream" and not fileExtension:
+				filename = self.decryptFilename(filename)
+
+				if not filename:
+					continue
+
+				fileExtension = filename.rsplit(".", 1)[-1]
+				encryptedFile = True
+
+			else:
+				encryptedFile = False
+
 			fileType = self.identifyFile(filename, fileExtension, mimeType)
 
 			if not fileType:
 				continue
-			elif fileType == "folder":
-				parentFolderID = file["parents"][0]
+
+			if fileType == "folder":
 				newPath = os.path.join(path, filename)
-				folderDic = files.get(folderID)
-				files[fileID] = {
-					"parent_folder_id": parentFolderID,
-					"remote_path": newPath,
-					"files": {
-						"video": [],
-						"subtitles": [],
-						"nfo": [],
-						"fanart": [],
-						"posters": [],
-					}
-				}
-				self.getGDriveFiles(fileID, newPath, files)
+				files[fileID] = self.createFolderDic(file["parents"][0], newPath)
+				self.getGDriveFiles(fileID, newPath, files, encrypted)
 			else:
 				metaData = file.get("videoMediaMetadata")
 				folderDic = files.get(folderID)
 
 				if not folderDic:
-					files[folderID] = {
-						"parent_folder_id": self.cloudService.getDirectory(fileID)[1],
-						"remote_path": path,
-						"files": {
-							"video": [],
-							"subtitles": [],
-							"nfo": [],
-							"fanart": [],
-							"posters": [],
-						}
-					}
+					files[folderID] = self.createFolderDic(file["parents"][0], path)
 
-				files[folderID]["files"][fileType].append({"filename": filename, "id": file["id"], "metadata": metaData})
+				files[folderID]["files"][fileType].append(
+					{
+						"filename": filename,
+						"id": file["id"],
+						"metadata": metaData,
+						"encrypted": encryptedFile,
+					}
+				)
 
 		return files
 
@@ -295,8 +332,14 @@ class StrmManager:
 		for file in list(files):
 			fileID = file["id"]
 			filename = file["filename"]
+			encrypted = file["encrypted"]
 			filePath = self.generateFilePath(dirPath, self.removeProhibitedFSchars(filename))
-			self.downloadFile(dirPath, filePath, fileID)
+
+			if encrypted:
+				self.downloadEncryptedFile(dirPath, filePath, fileID)
+			else:
+				self.downloadFile(dirPath, filePath, fileID)
+
 			filenames[fileID] = [
 				filename,
 				filename,
@@ -315,7 +358,12 @@ class StrmManager:
 		file = self.cloudService.downloadFile(fileID)
 
 		with open(filePath, "wb") as f:
-			f.write(file)
+			f.write(file.read())
+
+	def downloadEncryptedFile(self, dirPath, filePath, fileID):
+		self.createDirs(dirPath)
+		encryptedFile = self.cloudService.downloadFile(fileID)
+		self.encryption.decryptStream(encryptedFile, filePath)
 
 	@staticmethod
 	def removeProhibitedFSchars(name):
@@ -336,11 +384,11 @@ class StrmManager:
 
 		return filePath
 
-	def createStrm(self, dirPath, strmPath, contents):
+	def createStrm(self, dirPath, strmPath, contents, encrypted):
 		self.createDirs(dirPath)
 
 		with open (strmPath, "w+") as strm:
-			url = "plugin://plugin.video.gdrive/?mode=video&encfs=False" + "".join(["&{}={}".format(k, v) for k, v in contents.items() if v])
+			url = "plugin://plugin.video.gdrive/?mode=video&encfs=" + str(encrypted) + "".join(["&{}={}".format(k, v) for k, v in contents.items() if v])
 			strm.write(url)
 
 	@staticmethod
@@ -506,17 +554,18 @@ class StrmManager:
 		syncSubtitles = folderSettings["sync_subtitles"]
 		videoFiles = files.get("video")
 
-		videoTotal = len(videoFiles)
 		subtitles = files.get("subtitles")
 		fanart = files.get("fanart")
 		posters = files.get("poster")
 		nfos = files.get("nfo")
+		strm = files.get("strm")
 
 		for videoFile in videoFiles:
 			filename = videoFile["filename"]
 			videoFilename = os.path.splitext(filename)[0]
 			fileID = videoFile["id"]
 			videoMetadata = videoFile["metadata"]
+			encrypted = videoFile["encrypted"]
 			metadataRefresh = videoFile.get("metadata_refresh")
 			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
 			videoFilename = self.removeProhibitedFSchars(videoFilename)
@@ -591,7 +640,7 @@ class StrmManager:
 			if not strmPath:
 				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
 
-			self.createStrm(dirPath, strmPath, strmContent)
+			self.createStrm(dirPath, strmPath, strmContent, encrypted)
 
 			if metadataRefresh:
 				self.updateLibrary(strmPath, videoMetadata)
@@ -630,6 +679,9 @@ class StrmManager:
 
 		if syncNFO and nfos:
 			unaccountedFiles += nfos
+
+		if strm:
+			unaccountedFiles += strm
 
 		if unaccountedFiles:
 			self.downloadFiles(unaccountedFiles, remotePath, filenames, parentFolderID, fileIDs)
@@ -693,14 +745,8 @@ class StrmManager:
 								fileIDs.remove(fileID)
 
 			else:
-				fileExtension = file.get("fileExtension")
-				fileType = self.identifyFile(filename, fileExtension, mimeType)
-				metadataRefresh = False
 
-				if not fileType:
-					continue
-
-				if fileType == "folder":
+				if mimeType == "application/vnd.google-apps.folder":
 
 					if fileID not in dirPaths:
 						dirPath, folderID = self.getDirectory(dirPaths, fileID)
@@ -752,6 +798,27 @@ class StrmManager:
 					else:
 						dirPath, folderID, cachedParentFolderID = dirPaths[parentFolderID]
 
+				fileExtension = file.get("fileExtension")
+				encrypted = driveSettings["folders"][folderID]["contains_encrypted"]
+
+				if encrypted and mimeType == "application/octet-stream" and not fileExtension:
+					self.loadEncryption()
+					filename = self.decryptFilename(filename)
+
+					if not filename:
+						continue
+
+					fileExtension = filename.rsplit(".", 1)[-1]
+					encryptedFile = True
+				else:
+					encryptedFile = False
+
+				fileType = self.identifyFile(filename, fileExtension, mimeType)
+				metadataRefresh = False
+
+				if not fileType:
+					continue
+
 				if fileID in filenames:
 					cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
 
@@ -802,17 +869,9 @@ class StrmManager:
 				metaData = file.get("videoMediaMetadata")
 
 				if not newFiles:
-					newFiles[folderID] = {
-						"parent_folder_id": parentFolderID,
-						"directory_path": dirPath,
-						"video": [],
-						"subtitles": [],
-						"nfo": [],
-						"fanart": [],
-						"posters": [],
-					}
+					newFiles[folderID] = self.createFolderDic(parentFolderID, dirPath)
 
-				newFiles[folderID][fileType].append(
+				newFiles[folderID]["files"][fileType].append(
 					{
 						"parent_folder_id": parentFolderID,
 						"directory_path": dirPath,
@@ -820,15 +879,17 @@ class StrmManager:
 						"id": fileID,
 						"metadata": metaData,
 						"metadata_refresh": metadataRefresh,
+						"encrypted": encryptedFile,
 					}
 				)
 
 		if newFiles:
 
-			for folderID, files in newFiles.items():
+			for folderID, folderInfo in newFiles.items():
 				folderSettings = folders[folderID]
-				remotePath = files["directory_path"]
-				parentFolderID = files["parent_folder_id"]
+				remotePath = folderInfo["remote_path"]
+				parentFolderID = folderInfo["parent_folder_id"]
+				files = folderInfo["files"]
 				self.fileProcessor(files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID)
 
 			xbmc.executebuiltin("UpdateLibrary(video,{})".format(strmRoot))
@@ -982,6 +1043,11 @@ class StrmManager:
 		else:
 			taskDetails = driveSettings["task_details"]
 
+		encrypted = self.dialog.yesno("gDrive", "Does this folder contain gDrive encrypted files/strms?")
+
+		if encrypted:
+			self.loadEncryption()
+
 		fileRenaming = self.dialog.yesno("gDrive", "Rename videos to a Kodi friendly format?")
 
 		if not fileRenaming:
@@ -1010,6 +1076,7 @@ class StrmManager:
 			"sync_nfo": syncNFOs,
 			"sync_subtitles": syncSubtitles,
 			"root_path": os.path.join(gdriveRoot, driveID, folderName),
+			"contains_encrypted": encrypted,
 		}
 
 		self.cloudService = gdrive_api.GoogleDrive(self.accountManager)
@@ -1020,7 +1087,7 @@ class StrmManager:
 		strmRoot = self.strmSettings["root_path"]
 		folderSettings = driveSettings["folders"][folderID]
 		folderRoot = folderSettings["root_path"]
-		folders = self.getGDriveFiles(folderID, folderRoot, {})
+		folders = self.getGDriveFiles(folderID, folderRoot, {}, encrypted)
 		driveSettings["directory_paths"][folderID] = [folderRoot, folderID, None]
 
 		for subFolderID, folderInfo in folders.items():

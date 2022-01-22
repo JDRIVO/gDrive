@@ -60,12 +60,10 @@ class GoogleDrive:
 			xbmc.log("gdrive error: " + str(e))
 			return {"failed": str(e)}
 
-		responseData = response.read()
-
 		if download:
-			return responseData
+			return response
 
-		responseData = responseData.decode("utf-8")
+		responseData = response.read().decode("utf-8")
 		if cookie: cookie = response.headers["set-cookie"]
 		response.close()
 

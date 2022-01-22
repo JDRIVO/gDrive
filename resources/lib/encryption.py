@@ -154,12 +154,12 @@ class Encryption:
 
 				outFile.truncate(origSize)
 
-	def decryptStream(self, response, chunkSize=24 * 1024):
+	def decryptStream(self, response, outFilename, chunkSize=24 * 1024):
 		# with open(inFilename, "rb") as inFile:
 			origSize = struct.unpack("<Q", response.read(struct.calcsize("Q")))[0]
 			decryptor = AES.new(self.key, AES.MODE_ECB)
 
-			with open(outFilename, "w") as outFile:
+			with open(outFilename, "wb") as outFile:
 
 				while True:
 					chunk = response.read(chunkSize)
@@ -330,4 +330,7 @@ class Encryption:
 		if len(stringEncrypted) == 0:
 			return
 
-		return decryptor.decrypt(base64.b64decode(stringEncrypted.replace("---", "/").encode("utf-8"))).rstrip()
+		try:
+			return decryptor.decrypt(base64.b64decode(stringEncrypted.replace("---", "/").encode("utf-8"))).rstrip()
+		except:
+			return
