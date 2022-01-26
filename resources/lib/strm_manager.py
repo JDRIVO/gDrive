@@ -4,7 +4,6 @@ import html
 import json
 import math
 import time
-import shutil
 import urllib
 import difflib
 import datetime
@@ -16,57 +15,24 @@ import xbmcgui
 import xbmcvfs
 
 from . import encryption, gdrive_api
+from .file_operations import FileOperations
 from .PTN.parse import PTN
-
-SUBTITLES = (
-	"srt",
-	"ssa",
-	"vtt",
-	"sub",
-	"ttml",
-	"sami",
-	"ass",
-	"idx",
-	"sbv",
-	"stl",
-	"smi",
-)
-
-VIDEO_FILE_EXTENSIONS = (
-	"mpg",
-	"mp2",
-	"mpeg",
-	"mpe",
-	"mpv",
-	"avi",
-	"mov",
-	"mkv",
-)
-
-FS_PROHIBITED_CHARS = (
-	"<",
-	">",
-	"/",
-	"\\",
-	"?",
-	"*",
-	":",
-	"|",
-	'"',
-)
+from .sync import Sync
 
 
-class StrmManager:
+class StrmManager(FileOperations, Sync):
 
 	def __init__(self, settings, accountManager):
+		super(StrmManager, self).__init__()
 		self.settings = settings
 		self.accountManager = accountManager
 		self.accounts = self.accountManager.accounts
 		self.cloudService = gdrive_api.GoogleDrive(self.accountManager)
-		self.PTN = PTN()
 
+		self.PTN = PTN()
 		self.monitor = xbmc.Monitor()
 		self.dialog = xbmcgui.Dialog()
+
 		self.tasks = {}
 		self.taskIDs = []
 		self.id = 0
@@ -126,35 +92,7 @@ class StrmManager:
 		db.close()
 
 	@staticmethod
-	def identifyFile(filename, fileExtension, mimeType):
-
-		if mimeType == "application/vnd.google-apps.folder":
-			return "folder"
-
-		if not fileExtension:
-			return
-
-		fileExtension = fileExtension.lower()
-
-		if "video" in mimeType or fileExtension in VIDEO_FILE_EXTENSIONS:
-			return "video"
-		elif fileExtension == "nfo":
-			return "nfo"
-		elif fileExtension == "jpg":
-			fileNameLowerCase = filename.lower()
-
-			if "poster" in fileNameLowerCase:
-				return "poster"
-			elif "fanart" in fileNameLowerCase:
-				return "fanart"
-
-		elif fileExtension in SUBTITLES:
-			return "subtitles"
-		elif fileExtension == "strm":
-			return "strm"
-
-	@staticmethod
-	def createFolderDic(parentFolderID, remotePath):
+	def createTreeDic(parentFolderID, remotePath):
 		return {
 			"parent_folder_id": parentFolderID,
 			"remote_path": remotePath,
@@ -165,16 +103,41 @@ class StrmManager:
 				"nfo": [],
 				"fanart": [],
 				"posters": [],
-			}
+			},
+			"dirs": [],
 		}
 
-	def decryptFilename(self, filename):
-		decryptedFilename = self.encryption.decryptString(filename)
+	def getDirectory(self, dirPaths, folderID):
+		dirPath = ""
 
-		if decryptedFilename:
-			return decryptedFilename.decode("utf-8")
+		while folderID not in dirPaths:
 
-	def getGDriveFiles(self, folderID, path, files, encrypted):
+			try:
+				dirName, folderID = self.cloudService.getDirectory(folderID)
+			except KeyError:
+				return None, None
+
+			existingPath = dirPaths.get(folderID)
+
+			if existingPath:
+				dirPath = os.path.join(existingPath[0], dirPath)
+			else:
+				dirPath = os.path.join(dirName, dirPath)
+
+		return dirPath, dirPaths[folderID][1]
+
+
+	def updateCachedPaths(self, oldPath, newPath, cachedDirectories, folderID):
+		cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[folderID]
+
+		if oldPath in cachedDirPath:
+			replacement = cachedDirPath.replace(oldPath, newPath)
+			cachedDirectories[folderID][0] = replacement
+
+		for folderID in folderIDs:
+			self.updateCachedPaths(oldPath, newPath, cachedDirectories, folderID)
+
+	def getGDriveFiles(self, folderID, parentFolderID, path, files, encrypted):
 		remoteFiles = self.cloudService.listDir(folderID)
 
 		for file in remoteFiles:
@@ -201,16 +164,20 @@ class StrmManager:
 				continue
 
 			if fileType == "folder":
+				parentFolderID = file["parents"][0]
+
+			folderDic = files.get(folderID)
+
+			if not folderDic:
+				files[folderID] = self.createTreeDic(parentFolderID, path)
+
+			if fileType == "folder":
 				newPath = os.path.join(path, filename)
-				files[fileID] = self.createFolderDic(file["parents"][0], newPath)
-				self.getGDriveFiles(fileID, newPath, files, encrypted)
+				files[folderID]["dirs"].append(fileID)
+				files[fileID] = self.createTreeDic(parentFolderID, newPath)
+				self.getGDriveFiles(fileID, fileID, newPath, files, encrypted)
 			else:
 				metaData = file.get("videoMediaMetadata")
-				folderDic = files.get(folderID)
-
-				if not folderDic:
-					files[folderID] = self.createFolderDic(file["parents"][0], path)
-
 				files[folderID]["files"][fileType].append(
 					{
 						"filename": filename,
@@ -270,6 +237,7 @@ class StrmManager:
 			tmdbTitle, tmdbYear = tmdbResult[0]
 			tmdbTitle = self.removeProhibitedFSchars(html.unescape(tmdbTitle))
 			titleLowerCase = title.lower()
+
 			tmdbTitleLowerCase = tmdbTitle.lower()
 			title = title.lower()
 			titleSimilarity = difflib.SequenceMatcher(None, titleLowerCase, tmdbTitleLowerCase).ratio()
@@ -327,70 +295,6 @@ class StrmManager:
 			title, year = title
 			return "{} ({})".format(title, year)
 
-	def downloadFiles(self, files, dirPath, filenames, folderID, fileIDs):
-
-		for file in list(files):
-			fileID = file["id"]
-			filename = file["filename"]
-			encrypted = file["encrypted"]
-			filePath = self.generateFilePath(dirPath, self.removeProhibitedFSchars(filename))
-
-			if encrypted:
-				self.downloadEncryptedFile(dirPath, filePath, fileID)
-			else:
-				self.downloadFile(dirPath, filePath, fileID)
-
-			filenames[fileID] = [
-				filename,
-				filename,
-				folderID,
-				"rename&delete",
-				"original"
-			]
-
-			if fileID not in fileIDs:
-				fileIDs.append(fileID)
-
-			files.remove(file)
-
-	def downloadFile(self, dirPath, filePath, fileID):
-		self.createDirs(dirPath)
-		file = self.cloudService.downloadFile(fileID)
-
-		with open(filePath, "wb") as f:
-			f.write(file.read())
-
-	def downloadEncryptedFile(self, dirPath, filePath, fileID):
-		self.createDirs(dirPath)
-		encryptedFile = self.cloudService.downloadFile(fileID)
-		self.encryption.decryptStream(encryptedFile, filePath)
-
-	@staticmethod
-	def removeProhibitedFSchars(name):
-		return "".join([chr for chr in name if chr not in FS_PROHIBITED_CHARS])
-
-	def generateFilePath(self, dirPath, filename):
-		return self.duplicateFileCheck(dirPath, filename)
-
-	@staticmethod
-	def duplicateFileCheck(dirPath, filename):
-		filePath = os.path.join(dirPath, filename)
-		filename, fileExtension = os.path.splitext(filename)
-		copy = 1
-
-		while os.path.exists(filePath):
-			filePath = os.path.join(dirPath, "{} ({}){}".format(filename, copy, fileExtension))
-			copy += 1
-
-		return filePath
-
-	def createStrm(self, dirPath, strmPath, contents, encrypted):
-		self.createDirs(dirPath)
-
-		with open (strmPath, "w+") as strm:
-			url = "plugin://plugin.video.gdrive/?mode=video&encfs=" + str(encrypted) + "".join(["&{}={}".format(k, v) for k, v in contents.items() if v])
-			strm.write(url)
-
 	@staticmethod
 	def createSTRMContent(driveID, fileID, videoInfo):
 		del videoInfo["year"]
@@ -401,61 +305,149 @@ class StrmManager:
 		videoInfo["file_id"] = fileID
 		return videoInfo
 
-	def getDirectory(self, dirPaths, folderID):
-		dirPath = ""
+	def fileProcessor(self, cachedDirectories, cachedFiles, files, folderSettings, remotePath, strmRoot, driveID, parentFolderID):
+		folderStructure = folderSettings["folder_structure"]
+		fileRenaming = folderSettings["file_renaming"]
+		syncNFO = folderSettings["sync_nfo"]
+		syncArtwork = folderSettings["sync_artwork"]
+		syncSubtitles = folderSettings["sync_subtitles"]
 
-		while folderID not in dirPaths:
+		videoFiles = files.get("video")
+		subtitles = files.get("subtitles")
+		fanart = files.get("fanart")
 
-			try:
-				dirName, folderID = self.cloudService.getDirectory(folderID)
-			except KeyError:
-				return None, None
+		posters = files.get("poster")
+		nfos = files.get("nfo")
+		strm = files.get("strm")
 
-			existingPath = dirPaths.get(folderID)
+		fileIDs = cachedDirectories[parentFolderID][4]
 
-			if existingPath:
-				dirPath = os.path.join(existingPath[0], dirPath)
+		for videoFile in videoFiles:
+			filename = videoFile["filename"]
+			videoFilename = os.path.splitext(filename)[0]
+			fileID = videoFile["id"]
+			videoMetadata = videoFile["metadata"]
+			encrypted = videoFile["encrypted"]
+
+			metadataRefresh = videoFile.get("metadata_refresh")
+			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
+			videoFilename = self.removeProhibitedFSchars(videoFilename)
+			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
+
+			dirPath = remotePath
+			newVideoFilename = videoRenamed = strmPath = False
+			originalPath = True
+
+			if folderStructure != "original" or fileRenaming != "original":
+				videoTitle = videoInfo.get("title")
+				videoYear = videoInfo.get("year")
+				videoSeason = videoInfo.get("season")
+				videoEpisode = videoInfo.get("episode")
+				video = False
+
+				if videoEpisode is not None and videoSeason is not None and videoTitle:
+					video = "episode"
+					showCleanedUp = self.cleanUpEpisodeTitle(videoTitle, videoYear, videoSeason, videoEpisode)
+
+					if showCleanedUp:
+						videoSeason = showCleanedUp["season"]
+						videoTitle = showCleanedUp["title"]
+						newVideoFilename = showCleanedUp["filename"]
+					else:
+						newVideoFilename = False
+
+				elif videoTitle and videoYear:
+					video = "movie"
+					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
+
+				if folderStructure != "original" and newVideoFilename:
+
+					if video == "movie":
+						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
+
+						if fileRenaming != "original":
+							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
+							videoRenamed = True
+						else:
+							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
+
+					elif video == "episode":
+						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
+
+						if fileRenaming != "original":
+							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
+							videoRenamed = True
+						else:
+							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
+
+					originalPath = False
+
+				elif fileRenaming != "original" and newVideoFilename:
+					strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
+					videoRenamed = True
+
+				if syncSubtitles and subtitles:
+					self.pairMediaCompanions(subtitles, videoFilename, newVideoFilename, None, dirPath, videoRenamed, originalPath, cachedFiles, parentFolderID, subtitles=True)
+
+				if syncArtwork:
+
+					if fanart:
+						self.pairMediaCompanions(fanart, videoFilename, newVideoFilename, "-fanart.jpg", dirPath, videoRenamed, originalPath, cachedFiles, parentFolderID)
+
+					if posters:
+						self.pairMediaCompanions(posters, videoFilename, newVideoFilename, "-poster.jpg", dirPath, videoRenamed, originalPath, cachedFiles, parentFolderID)
+
+				if syncNFO and nfos:
+					self.pairMediaCompanions(nfos, videoFilename, newVideoFilename, ".nfo", dirPath, videoRenamed, originalPath, cachedFiles, parentFolderID)
+
+			if not strmPath:
+				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
+
+			self.createStrm(dirPath, strmPath, strmContent, encrypted)
+
+			if metadataRefresh:
+				self.updateLibrary(strmPath, videoMetadata)
+
+			if videoRenamed:
+
+				if not originalPath:
+					params = [strmPath, filename, parentFolderID, "delete", "modified"]
+				else:
+					params = [os.path.basename(strmPath), filename, parentFolderID, "delete", "original"]
+
 			else:
-				dirPath = os.path.join(dirName, dirPath)
 
-		return dirPath, dirPaths[folderID][1]
+				if not originalPath:
+					params = [strmPath, filename, parentFolderID, "rename&delete", "modified"]
+				else:
+					params = [os.path.basename(strmPath), filename, parentFolderID, "rename&delete", "original"]
 
-	@staticmethod
-	def deleteEmptyDirs(dirPath, strmRoot):
+			cachedFiles[fileID] = params
 
-		while dirPath != strmRoot and os.path.exists(dirPath) and not os.listdir(dirPath):
-			os.rmdir(dirPath)
-			dirPath = dirPath.rsplit(os.sep, 1)[0]
+			if fileID not in fileIDs:
+				fileIDs.append(fileID)
 
-	def deleteFile(self, strmRoot, filePath=None, dirPath=None, filename=None):
+		unaccountedFiles = []
 
-		if not filePath:
-			filePath = os.path.join(dirPath, filename)
-		else:
-			dirPath, filename = os.path.split(filePath)
+		if syncSubtitles and subtitles:
+			unaccountedFiles += subtitles
 
-		if os.path.exists(filePath):
-			os.remove(filePath)
+		if syncArtwork and (fanart or posters):
 
-		self.deleteEmptyDirs(dirPath, strmRoot)
+			if fanart:
+				unaccountedFiles += fanart
 
-	@staticmethod
-	def createDirs(dirPath):
+			if posters:
+				unaccountedFiles += posters
 
-		if not os.path.exists(dirPath):
-			os.makedirs(dirPath)
+		if syncNFO and nfos:
+			unaccountedFiles += nfos
 
-	def renameFile(self, strmRoot, oldPath, dirPath, newName):
-		self.createDirs(dirPath)
-		newPath = self.duplicateFileCheck(dirPath, newName)
-		shutil.move(oldPath, newPath)
-		self.deleteEmptyDirs(os.path.dirname(oldPath), strmRoot)
-		return newPath
+		if strm:
+			unaccountedFiles += strm
 
-	def renameFolder(self, strmRoot, oldPath, newPath):
-		self.createDirs(newPath)
-		shutil.move(oldPath, newPath)
-		self.deleteEmptyDirs(oldPath, strmRoot)
+		if unaccountedFiles:
+			self.downloadFiles(unaccountedFiles, remotePath, cachedFiles, parentFolderID, fileIDs)
 
 	def pairMediaCompanions(self, mediaExtras, videoFilename, newVideoFilename, fileExtension, dirPath, videoRenamed, originalPath, fileCache, folderID, subtitles=False):
 
@@ -539,371 +531,6 @@ class StrmManager:
 			"hdr": hdr,
 		}
 
-	def fileProcessor(self, files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID):
-		filenames = driveSettings["filenames"]
-		folderStructure = folderSettings["folder_structure"]
-		fileRenaming = folderSettings["file_renaming"]
-		syncNFO = folderSettings["sync_nfo"]
-		folderIDs = folderSettings["folder_ids"]
-
-		if parentFolderID not in folderIDs:
-			folderIDs.append(parentFolderID)
-
-		fileIDs = folderSettings["file_ids"]
-		syncArtwork = folderSettings["sync_artwork"]
-		syncSubtitles = folderSettings["sync_subtitles"]
-		videoFiles = files.get("video")
-
-		subtitles = files.get("subtitles")
-		fanart = files.get("fanart")
-		posters = files.get("poster")
-		nfos = files.get("nfo")
-		strm = files.get("strm")
-
-		for videoFile in videoFiles:
-			filename = videoFile["filename"]
-			videoFilename = os.path.splitext(filename)[0]
-			fileID = videoFile["id"]
-			videoMetadata = videoFile["metadata"]
-			encrypted = videoFile["encrypted"]
-			metadataRefresh = videoFile.get("metadata_refresh")
-			videoInfo = self.getVideoInfo(videoFilename, videoMetadata)
-			videoFilename = self.removeProhibitedFSchars(videoFilename)
-
-			strmContent = self.createSTRMContent(driveID, fileID, dict(videoInfo))
-			dirPath = remotePath
-			newVideoFilename = videoRenamed = strmPath = False
-			originalPath = True
-
-			if folderStructure != "original" or fileRenaming != "original":
-				videoTitle = videoInfo.get("title")
-				videoYear = videoInfo.get("year")
-				videoSeason = videoInfo.get("season")
-				videoEpisode = videoInfo.get("episode")
-				video = False
-
-				if videoEpisode is not None and videoSeason is not None and videoTitle:
-					video = "episode"
-					showCleanedUp = self.cleanUpEpisodeTitle(videoTitle, videoYear, videoSeason, videoEpisode)
-
-					if showCleanedUp:
-						videoSeason = showCleanedUp["season"]
-						videoTitle = showCleanedUp["title"]
-						newVideoFilename = showCleanedUp["filename"]
-					else:
-						newVideoFilename = False
-
-				elif videoTitle and videoYear:
-					video = "movie"
-					newVideoFilename = self.cleanUpMovieTitle(videoTitle, videoYear)
-
-				if folderStructure != "original" and newVideoFilename:
-
-					if video == "movie":
-						dirPath = os.path.join(strmRoot, "1. Movies [gDrive]")
-
-						if fileRenaming != "original":
-							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
-							videoRenamed = True
-						else:
-							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
-
-					elif video == "episode":
-						dirPath = os.path.join(strmRoot, "2. TV [gDrive]", videoTitle, "Season " + videoSeason)
-
-						if fileRenaming != "original":
-							strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
-							videoRenamed = True
-						else:
-							strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
-
-					originalPath = False
-
-				elif fileRenaming != "original" and newVideoFilename:
-					strmPath = self.generateFilePath(dirPath, newVideoFilename + ".strm")
-					videoRenamed = True
-
-				if syncSubtitles and subtitles:
-					self.pairMediaCompanions(subtitles, videoFilename, newVideoFilename, None, dirPath, videoRenamed, originalPath, filenames, parentFolderID, subtitles=True)
-
-				if syncArtwork:
-
-					if fanart:
-						self.pairMediaCompanions(fanart, videoFilename, newVideoFilename, "-fanart.jpg", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
-
-					if posters:
-						self.pairMediaCompanions(posters, videoFilename, newVideoFilename, "-poster.jpg", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
-
-				if syncNFO and nfos:
-					self.pairMediaCompanions(nfos, videoFilename, newVideoFilename, ".nfo", dirPath, videoRenamed, originalPath, filenames, parentFolderID)
-
-			if not strmPath:
-				strmPath = self.generateFilePath(dirPath, videoFilename + ".strm")
-
-			self.createStrm(dirPath, strmPath, strmContent, encrypted)
-
-			if metadataRefresh:
-				self.updateLibrary(strmPath, videoMetadata)
-
-			if videoRenamed:
-
-				if not originalPath:
-					params = [strmPath, filename, parentFolderID, "delete", "modified"]
-				else:
-					params = [os.path.basename(strmPath), filename, parentFolderID, "delete", "original"]
-
-			else:
-
-				if not originalPath:
-					params = [strmPath, filename, parentFolderID, "rename&delete", "modified"]
-				else:
-					params = [os.path.basename(strmPath), filename, parentFolderID, "rename&delete", "original"]
-
-			filenames[fileID] = params
-
-			if fileID not in fileIDs:
-				fileIDs.append(fileID)
-
-		unaccountedFiles = []
-
-		if syncSubtitles and subtitles:
-			unaccountedFiles += subtitles
-
-		if syncArtwork and (fanart or posters):
-
-			if fanart:
-				unaccountedFiles += fanart
-
-			if posters:
-				unaccountedFiles += posters
-
-		if syncNFO and nfos:
-			unaccountedFiles += nfos
-
-		if strm:
-			unaccountedFiles += strm
-
-		if unaccountedFiles:
-			self.downloadFiles(unaccountedFiles, remotePath, filenames, parentFolderID, fileIDs)
-
-	def sync(self, driveID):
-		account = self.accountManager.getAccount(driveID)
-		self.cloudService.setAccount(account)
-		self.cloudService.refreshToken()
-		driveSettings = self.strmSettings["drives"][driveID]
-		apiCall = self.cloudService.getChanges(driveSettings["page_token"])
-
-		changes = apiCall["changes"]
-		pageToken = apiCall["newStartPageToken"]
-		strmRoot = self.strmSettings["root_path"]
-		xbmc.log("THE CHANGES ARE ", xbmc.LOGERROR)
-		xbmc.log(json.dumps(changes, sort_keys=True, indent=4), xbmc.LOGERROR)
-
-		if not changes:
-			return
-
-		dirPaths = driveSettings["directory_paths"]
-		filenames = driveSettings["filenames"]
-		folders = driveSettings["folders"]
-		newFiles = {}
-		deleted = False
-
-		for change in changes:
-			file = change["file"]
-			fileID = file["id"]
-			filename = file["name"]
-			mimeType = file["mimeType"]
-			parentFolderID = file.get("parents")
-
-			if not parentFolderID:
-				# file not inside a folder
-				continue
-
-			parentFolderID = parentFolderID[0]
-
-			if file["trashed"]:
-
-				if fileID in filenames:
-					cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
-
-					if folderStructure == "original":
-						self.deleteFile(strmRoot, dirPath=dirPaths[parentFolderID][0], filename=cachedFile)
-					else:
-						self.deleteFile(strmRoot, filePath=cachedFile)
-
-					del filenames[fileID]
-					deleted = True
-
-					if cachedParentFolderID in dirPaths:
-						cachedDirPath, cachedRootFolderID, cachedParentFolderID = dirPaths[cachedParentFolderID]
-
-						if cachedRootFolderID in folders:
-							folderSettings = folders[cachedRootFolderID]
-							fileIDs = folderSettings["file_ids"]
-
-							if fileID in fileIDs:
-								fileIDs.remove(fileID)
-
-			else:
-
-				if mimeType == "application/vnd.google-apps.folder":
-
-					if fileID not in dirPaths:
-						dirPath, folderID = self.getDirectory(dirPaths, fileID)
-
-						if folderID:
-							dirPath = os.path.join(dirPath, filename)
-							dirPaths[fileID] = [dirPath, folderID, parentFolderID]
-
-						continue
-
-					else:
-						cachedDirPath, cachedRootFolderID, cachedParentFolderID = dirPaths[fileID]
-						cachedDirPathHead, dirName = cachedDirPath.rsplit(os.sep, 1)
-
-						if parentFolderID != cachedParentFolderID and fileID != cachedRootFolderID:
-							del dirPaths[fileID]
-							dirPath, folderID = self.getDirectory(dirPaths, fileID)
-
-							if dirPath:
-								newDirPath = os.path.join(dirPath, filename)
-								self.renameFolder(strmRoot, cachedDirPath, newDirPath)
-								dirPaths[fileID] = newDirPath, folderID, parentFolderID
-							else:
-								# Folder moved to another root folder != existing root folder - delete current folder
-								# Request files in the dir to be deleted and delete each individual file or perform the more risky and lazy method - delete entire folder
-								continue
-
-						elif dirName != filename:
-
-							if not os.path.exists(cachedDirPath):
-								pass
-								# del dirPaths[fileID]
-								# Delete all cached items
-							else:
-								newDirPath = os.path.join(cachedDirPathHead, filename)
-								self.renameFolder(strmRoot, cachedDirPath, newDirPath)
-								dirPaths[fileID][0] = newDirPath
-
-						continue
-
-				else:
-
-					if parentFolderID not in dirPaths:
-						dirPath, folderID = self.getDirectory(dirPaths, parentFolderID)
-
-						if not folderID:
-							continue
-
-					else:
-						dirPath, folderID, cachedParentFolderID = dirPaths[parentFolderID]
-
-				fileExtension = file.get("fileExtension")
-				encrypted = driveSettings["folders"][folderID]["contains_encrypted"]
-
-				if encrypted and mimeType == "application/octet-stream" and not fileExtension:
-					self.loadEncryption()
-					filename = self.decryptFilename(filename)
-
-					if not filename:
-						continue
-
-					fileExtension = filename.rsplit(".", 1)[-1]
-					encryptedFile = True
-				else:
-					encryptedFile = False
-
-				fileType = self.identifyFile(filename, fileExtension, mimeType)
-				metadataRefresh = False
-
-				if not fileType:
-					continue
-
-				if fileID in filenames:
-					cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = filenames[fileID]
-
-					if folderStructure == "original":
-						cachedFilePath = os.path.join(dirPaths[cachedParentFolderID][0], cachedFile)
-					else:
-						cachedFilePath = cachedFile
-
-					if cachedOriginalFilename == filename and dirPaths[cachedParentFolderID][0] == dirPath:
-						# this needs to be done as GDRIVE creates multiple changes for a file, one before its metadata is processed and another change after the metadata is processed
-						self.deleteFile(strmRoot, filePath=cachedFilePath)
-						del filenames[fileID]
-						metadataRefresh = True
-					else:
-
-						if mode == "rename&delete":
-
-							if folderStructure == "original":
-
-								if not os.path.exists(cachedFilePath):
-									del filenames[fileID]
-								else:
-									fileExtension = os.path.splitext(cachedFile)[1]
-									filenameWithoutExt = os.path.splitext(filename)[0]
-									newFilename = filenameWithoutExt + fileExtension
-
-									newFilePath = self.renameFile(strmRoot, cachedFilePath, dirPath, newFilename)
-									filenames[fileID] = [newFilename, filename, parentFolderID, mode, folderStructure]
-									continue
-
-							else:
-
-								if not os.path.exists(cachedFilePath):
-									del filenames[fileID]
-								else:
-									fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
-									filenameWithoutExt = os.path.splitext(filename)[0]
-									newFilename = filenameWithoutExt + fileExtension
-
-									newFilePath = self.renameFile(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
-									filenames[fileID][0] = newFilePath
-									continue
-
-						else:
-							self.deleteFile(strmRoot, filePath=cachedFilePath)
-							del filenames[fileID]
-
-				metaData = file.get("videoMediaMetadata")
-
-				if not newFiles:
-					newFiles[folderID] = self.createFolderDic(parentFolderID, dirPath)
-
-				newFiles[folderID]["files"][fileType].append(
-					{
-						"parent_folder_id": parentFolderID,
-						"directory_path": dirPath,
-						"filename": filename,
-						"id": fileID,
-						"metadata": metaData,
-						"metadata_refresh": metadataRefresh,
-						"encrypted": encryptedFile,
-					}
-				)
-
-		if newFiles:
-
-			for folderID, folderInfo in newFiles.items():
-				folderSettings = folders[folderID]
-				remotePath = folderInfo["remote_path"]
-				parentFolderID = folderInfo["parent_folder_id"]
-				files = folderInfo["files"]
-				self.fileProcessor(files, folderSettings, remotePath, strmRoot, driveID, driveSettings, parentFolderID)
-
-			xbmc.executebuiltin("UpdateLibrary(video,{})".format(strmRoot))
-
-		if deleted:
-
-			if os.name == "nt":
-				strmRoot = strmRoot.replace("\\", "\\\\")
-
-			xbmc.executeJSONRPC('{"jsonrpc": "2.0", "id": 1, "method": "VideoLibrary.Clean", "params": {"showdialogs": false, "content": "video", "directory": "%s"}}' % strmRoot)
-
-		driveSettings["page_token"] = pageToken
-		self.saveStrmSettings()
-
 	@staticmethod
 	def strptime(dateString, format):
 		return datetime.datetime(*(time.strptime(dateString, format)[0:6]))
@@ -959,7 +586,7 @@ class StrmManager:
 				continue
 
 			startUpRun = False
-			self.sync(driveID)
+			self.syncChanges(driveID)
 			lastUpdate = time.time()
 
 	def scheduledTask(self, startupSync, syncTime, driveID, taskID, startUpRun=True):
@@ -984,7 +611,7 @@ class StrmManager:
 				continue
 
 			startUpRun = False
-			self.sync(driveID)
+			self.syncChanges(driveID)
 
 			if self.monitor.waitForAbort(60):
 				# self.saveStrmSettings()
@@ -1033,8 +660,8 @@ class StrmManager:
 				"page_token": None,
 				"folders": {},
 				"last_update": time.time(),
-				"filenames": {},
-				"directory_paths": {},
+				"files": {},
+				"directories": {},
 				"root_path": os.path.join(gdriveRoot, driveID),
 				"task_details": taskDetails,
 			}
@@ -1068,8 +695,6 @@ class StrmManager:
 		self.dialog.notification("gDrive", "Generating files please wait. A notification will appear when this task has completed.")
 
 		driveSettings["folders"][folderID] = {
-			"file_ids": [],
-			"folder_ids": [],
 			"folder_structure": folderStructure,
 			"file_renaming": fileRenaming,
 			"sync_artwork": syncArtwork,
@@ -1087,22 +712,23 @@ class StrmManager:
 		strmRoot = self.strmSettings["root_path"]
 		folderSettings = driveSettings["folders"][folderID]
 		folderRoot = folderSettings["root_path"]
-		folders = self.getGDriveFiles(folderID, folderRoot, {}, encrypted)
-		driveSettings["directory_paths"][folderID] = [folderRoot, folderID, None]
+		folders = self.getGDriveFiles(folderID, folderID, folderRoot, {}, encrypted)
+
+		cachedDirectories = driveSettings["directories"]
+		cachedFiles = driveSettings["files"]
 
 		for subFolderID, folderInfo in folders.items():
 			remotePath = folderInfo["remote_path"]
 			parentFolderID = folderInfo["parent_folder_id"]
 			dirPath = os.path.join(folderRoot, remotePath)
-
-			driveSettings["directory_paths"][subFolderID] = [dirPath, folderID, parentFolderID]
-			files = folderInfo["files"]
-			self.fileProcessor(files, folderSettings, dirPath, strmRoot, driveID, driveSettings, subFolderID)
+			cachedDirectories[subFolderID] = [dirPath, folderID, parentFolderID, folderInfo["dirs"], []]
+			self.fileProcessor(cachedDirectories, cachedFiles, folderInfo["files"], folderSettings, dirPath, strmRoot, driveID, subFolderID)
 
 		if not driveSettings.get("page_token"):
 			driveSettings["page_token"] = self.cloudService.getPageToken()
 
 		self.saveStrmSettings()
+		xbmc.executebuiltin("UpdateLibrary(video,{})".format(strmRoot))
 		xbmc.executebuiltin("Container.Refresh")
 		self.dialog.notification("gDrive", "Sync Completed")
 		self.spawnTask(taskDetails, driveID, startUpRun=False)
