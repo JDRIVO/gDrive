@@ -48,7 +48,7 @@ class Sync:
 			else:
 
 				if mimeType == "application/vnd.google-apps.folder":
-					self.syncFolderChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, driveID)
+					self.syncFolderChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, parentFolderID, driveID)
 				else:
 					self.syncFileChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData)
 
@@ -91,7 +91,55 @@ class Sync:
 
 			return True
 
-	def syncFolderChanges(self, cachedDirectories, cachedFiles, folders, strmRoot, folderID, folderName, mimeType, parentFolderID, fileExtension, newFiles, driveID):
+	@staticmethod
+	def removeFolderIDfromCachedList(cachedDirectories, parentFolderID, folderID):
+
+		if parentFolderID in cachedDirectories:
+			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
+
+			if folderID in folderIDs:
+				folderIDs.remove(folderID)
+
+	@staticmethod
+	def addFolderIDtoCachedList(cachedDirectories, parentFolderID, folderID):
+
+		if parentFolderID in cachedDirectories:
+			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
+			folderIDs.append(folderID)
+
+	@staticmethod
+	def removeFileIDfromCachedList(cachedDirectories, parentFolderID, fileID):
+
+		if parentFolderID in cachedDirectories:
+			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
+
+			if fileID in fileIDs:
+				fileIDs.remove(fileID)
+
+	@staticmethod
+	def addFileIDtoCachedList(cachedDirectories, parentFolderID, fileID):
+
+		if parentFolderID in cachedDirectories:
+			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
+			fileIDs.append(fileID)
+
+	def downloadFolder(self, strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, rootFolderID, driveID):
+		self.addFolderIDtoCachedList(cachedDirectories, parentFolderID, folderID)
+		folderSettings = folders[rootFolderID]
+		folderRoot = folderSettings["root_path"]
+
+		encrypted = folderSettings["contains_encrypted"]
+		dirTree = self.getGDriveFiles(folderID, parentFolderID, dirPath, {}, encrypted)
+
+		for subFolderID, folderInfo in dirTree.items():
+			remotePath = folderInfo["remote_path"]
+			parentFolderID = folderInfo["parent_folder_id"]
+			files = folderInfo["files"]
+			dirPath = os.path.join(folderRoot, remotePath)
+			cachedDirectories[subFolderID] = [dirPath, rootFolderID, parentFolderID, folderInfo["dirs"], []]
+			self.fileProcessor(cachedDirectories, cachedFiles, files, folderSettings, dirPath, strmRoot, driveID, subFolderID)
+
+	def syncFolderChanges(self, cachedDirectories, cachedFiles, folders, strmRoot, folderID, folderName, parentFolderID, driveID):
 
 		if folderID not in cachedDirectories:
 			# New folder added
@@ -100,31 +148,27 @@ class Sync:
 			if not rootFolderID:
 				return
 
-			if parentFolderID in cachedDirectories:
-				cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
-				folderIDs.append(folderID)
-
-			folderSettings = folders[rootFolderID]
-			folderRoot = folderSettings["root_path"]
-			encrypted = folderSettings["contains_encrypted"]
-
 			dirPath = os.path.join(dirPath, folderName)
-			dirTree = self.getGDriveFiles(folderID, parentFolderID, dirPath, {}, encrypted)
-
-			for subFolderID, folderInfo in dirTree.items():
-				remotePath = folderInfo["remote_path"]
-				parentFolderID = folderInfo["parent_folder_id"]
-				files = folderInfo["files"]
-
-				dirPath = os.path.join(folderRoot, remotePath)
-				cachedDirectories[subFolderID] = [dirPath, rootFolderID, parentFolderID, folderInfo["dirs"], []]
-				self.fileProcessor(cachedDirectories, cachedFiles, files, folderSettings, dirPath, strmRoot, driveID, subFolderID)
+			self.downloadFolder(strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, rootFolderID, driveID)
 
 		else:
 			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[folderID]
 			cachedDirPathHead, dirName = cachedDirPath.rsplit(os.sep, 1)
 
-			if parentFolderID != cachedParentFolderID and folderID != cachedRootFolderID:
+			if not os.path.exists(cachedDirPath):
+				copy = cachedDirectories.copy()
+				del copy[folderID]
+				dirPath, rootFolderID = self.getDirectory(copy, folderID)
+				self.deleteFiles(strmRoot, folderID, cachedDirectories, cachedFiles)
+				self.removeFolderIDfromCachedList(cachedDirectories, cachedParentFolderID, folderID)
+
+				if not rootFolderID:
+					return
+
+				dirPath = os.path.join(dirPath, folderName)
+				self.downloadFolder(strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, cachedRootFolderID, driveID)
+
+			elif parentFolderID != cachedParentFolderID and folderID != cachedRootFolderID:
 				copy = cachedDirectories.copy()
 				del copy[folderID]
 				# folder has been moved into another directory
@@ -134,33 +178,18 @@ class Sync:
 					newDirPath = os.path.join(dirPath, folderName)
 					self.renameFolder(strmRoot, cachedDirPath, newDirPath)
 					cachedDirectories[folderID] = [newDirPath, rootFolderID, parentFolderID, folderIDs, fileIDs]
-					self.updateCachedPaths(cachedDirPath, newDirPath, cachedDirectories, folderID)
-
-					cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[cachedParentFolderID]
-					folderIDs.remove(folderID)
-					cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
-					folderIDs.append(folderID)
+					self.removeFolderIDfromCachedList(cachedDirectories, cachedParentFolderID, folderID)
+					self.addFolderIDtoCachedList(cachedDirectories, parentFolderID, folderID)
 				else:
+					# folder moved to another root folder != existing root folder - delete current folder
 					self.deleteFiles(strmRoot, folderID, cachedDirectories, cachedFiles)
-					# Folder moved to another root folder != existing root folder - delete current folder
-					# Request files in the dir to be deleted and delete each individual file or perform the more risky and lazy method - delete entire folder
-					cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[cachedParentFolderID]
-					folderIDs.remove(folderID)
+					self.removeFolderIDfromCachedList(cachedDirectories, cachedParentFolderID, folderID)
 
 			elif dirName != folderName:
 				# folder name has been changed
-
-				if not os.path.exists(cachedDirPath):
-					# redownload
-
-					pass
-					# del cachedDirectories[folderID]
-					# Delete all cached items
-				else:
-					newDirPath = os.path.join(cachedDirPathHead, folderName)
-					self.renameFolder(strmRoot, cachedDirPath, newDirPath)
-					cachedDirectories[folderID][0] = newDirPath
-					self.updateCachedPaths(cachedDirPath, newDirPath, cachedDirectories, folderID)
+				newDirPath = os.path.join(cachedDirPathHead, folderName)
+				self.renameFolder(strmRoot, cachedDirPath, newDirPath)
+				cachedDirectories[folderID][0] = newDirPath
 
 	def syncFileChanges(self, cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData):
 
@@ -180,8 +209,7 @@ class Sync:
 
 					self.deleteFile(strmRoot, filePath=cachedFilePath)
 					del cachedFiles[fileID]
-					dirPath, rootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[cachedParentFolderID]
-					fileIDs.remove(fileID)
+					self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
 
 				return
 
@@ -211,14 +239,14 @@ class Sync:
 
 		if fileID in cachedFiles:
 			cachedFile, cachedOriginalFilename, cachedParentFolderID, mode, folderStructure = cachedFiles[fileID]
-			dirPath, rootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[cachedParentFolderID]
+			cachedDirPath, rootFolderID, _, folderIDs, fileIDs = cachedDirectories[cachedParentFolderID]
 
 			if folderStructure == "original":
-				cachedFilePath = os.path.join(cachedDirectories[cachedParentFolderID][0], cachedFile)
+				cachedFilePath = os.path.join(cachedDirPath, cachedFile)
 			else:
 				cachedFilePath = cachedFile
 
-			if cachedOriginalFilename == filename and cachedDirectories[cachedParentFolderID][0] == dirPath:
+			if cachedOriginalFilename == filename and cachedDirPath == dirPath:
 				# this needs to be done as GDRIVE creates multiple changes for a file, one before its metadata is processed and another change after the metadata is processed
 				self.deleteFile(strmRoot, filePath=cachedFilePath)
 				del cachedFiles[fileID]
@@ -228,35 +256,34 @@ class Sync:
 
 				if mode == "rename&delete":
 
-					if folderStructure == "original":
+					if not os.path.exists(cachedFilePath):
+						self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
+						del cachedFiles[fileID]
+					elif folderStructure == "original":
+						fileExtension = os.path.splitext(cachedFile)[1]
+						filenameWithoutExt = os.path.splitext(filename)[0]
+						newFilename = filenameWithoutExt + fileExtension
 
-						if not os.path.exists(cachedFilePath):
-							del cachedFiles[fileID]
-						else:
-							fileExtension = os.path.splitext(cachedFile)[1]
-							filenameWithoutExt = os.path.splitext(filename)[0]
-							newFilename = filenameWithoutExt + fileExtension
+						newFilePath = self.renameFile(strmRoot, cachedFilePath, dirPath, newFilename)
+						cachedFiles[fileID] = [newFilename, filename, parentFolderID, mode, folderStructure]
+						self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
+						self.addFileIDtoCachedList(cachedDirectories, parentFolderID, fileID)
+						return
+					elif folderStructure == "modified":
+						fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
+						filenameWithoutExt = os.path.splitext(filename)[0]
+						newFilename = filenameWithoutExt + fileExtension
 
-							newFilePath = self.renameFile(strmRoot, cachedFilePath, dirPath, newFilename)
-							cachedFiles[fileID] = [newFilename, filename, parentFolderID, mode, folderStructure]
-							return
-
-					else:
-
-						if not os.path.exists(cachedFilePath):
-							del cachedFiles[fileID]
-						else:
-							fileExtension = os.path.splitext(os.path.basename(cachedFile))[1]
-							filenameWithoutExt = os.path.splitext(filename)[0]
-							newFilename = filenameWithoutExt + fileExtension
-
-							newFilePath = self.renameFile(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
-							cachedFiles[fileID][0] = newFilePath
-							return
+						newFilePath = self.renameFile(strmRoot, cachedFilePath, os.path.dirname(cachedFile), newFilename)
+						cachedFiles[fileID][0] = newFilePath
+						self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
+						self.addFileIDtoCachedList(cachedDirectories, parentFolderID, fileID)
+						return
 
 				else:
 					self.deleteFile(strmRoot, filePath=cachedFilePath)
 					del cachedFiles[fileID]
+					self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
 
 		if not newFiles:
 			newFiles[rootFolderID] = self.createTreeDic(parentFolderID, dirPath)
