@@ -50,7 +50,7 @@ class Sync:
 				if mimeType == "application/vnd.google-apps.folder":
 					self.syncFolderChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, parentFolderID, driveID)
 				else:
-					self.syncFileChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData)
+					self.syncFileChanges(cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData, driveID)
 
 		if newFiles:
 
@@ -105,7 +105,9 @@ class Sync:
 
 		if parentFolderID in cachedDirectories:
 			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
-			folderIDs.append(folderID)
+
+			if folderID not in folderIDs:
+				folderIDs.append(folderID)
 
 	@staticmethod
 	def removeFileIDfromCachedList(cachedDirectories, parentFolderID, fileID):
@@ -121,13 +123,14 @@ class Sync:
 
 		if parentFolderID in cachedDirectories:
 			cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[parentFolderID]
-			fileIDs.append(fileID)
+
+			if fileID not in fileIDs:
+				fileIDs.append(fileID)
 
 	def downloadFolder(self, strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, rootFolderID, driveID):
 		self.addFolderIDtoCachedList(cachedDirectories, parentFolderID, folderID)
 		folderSettings = folders[rootFolderID]
 		folderRoot = folderSettings["root_path"]
-
 		encrypted = folderSettings["contains_encrypted"]
 		dirTree = self.getGDriveFiles(folderID, parentFolderID, dirPath, {}, encrypted)
 
@@ -135,6 +138,7 @@ class Sync:
 			remotePath = folderInfo["remote_path"]
 			parentFolderID = folderInfo["parent_folder_id"]
 			files = folderInfo["files"]
+
 			dirPath = os.path.join(folderRoot, remotePath)
 			cachedDirectories[subFolderID] = [dirPath, rootFolderID, parentFolderID, folderInfo["dirs"], []]
 			self.fileProcessor(cachedDirectories, cachedFiles, files, folderSettings, dirPath, strmRoot, driveID, subFolderID)
@@ -148,7 +152,13 @@ class Sync:
 			if not rootFolderID:
 				return
 
-			dirPath = os.path.join(dirPath, folderName)
+			if os.path.exists(dirPath):
+				dirPath = os.path.join(dirPath, folderName)
+			else:
+				folderID = parentFolderID
+				cachedDirPath, cachedRootFolderID, cachedParentFolderID, folderIDs, fileIDs = cachedDirectories[folderID]
+				parentFolderID = cachedParentFolderID
+
 			self.downloadFolder(strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, rootFolderID, driveID)
 
 		else:
@@ -191,7 +201,7 @@ class Sync:
 				self.renameFolder(strmRoot, cachedDirPath, newDirPath)
 				cachedDirectories[folderID][0] = newDirPath
 
-	def syncFileChanges(self, cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData):
+	def syncFileChanges(self, cachedDirectories, cachedFiles, folders, strmRoot, fileID, filename, mimeType, parentFolderID, fileExtension, newFiles, metaData, driveID):
 
 		if parentFolderID not in cachedDirectories:
 			dirPath, rootFolderID = self.getDirectory(cachedDirectories, parentFolderID)
@@ -284,6 +294,14 @@ class Sync:
 					self.deleteFile(strmRoot, filePath=cachedFilePath)
 					del cachedFiles[fileID]
 					self.removeFileIDfromCachedList(cachedDirectories, cachedParentFolderID, fileID)
+
+		else:
+
+			if not os.path.exists(dirPath):
+				folderID = parentFolderID
+				parentFolderID = self.cloudService.getDirectory(parentFolderID)[1]
+				self.downloadFolder(strmRoot, dirPath, folders, cachedDirectories, cachedFiles, parentFolderID, folderID, rootFolderID, driveID)
+				return
 
 		if not newFiles:
 			newFiles[rootFolderID] = self.createTreeDic(parentFolderID, dirPath)
