@@ -8,12 +8,12 @@ import shlex
 import subprocess
 
 videoPath = sys.argv[1]
-encryptedFilePath = sys.argv[2]
+remoteVideoPath = sys.argv[2]
 strmPath = sys.argv[3]
 driveID = sys.argv[4] # Optional - if not included you will need to manually set the playback account in settings
 
 # videoPath = "/home/jack/movies/best movie 2000.mkv"
-# encryptedFilePath = "remote:/folder/RrtgFuvcxsWfKuFgGJ34VvcgfGFGWEWet"
+# remoteVideoPath = "remote:/folder/RrtgFuvcxsWfKuFgGJ34VvcgfGFGWEWet"
 # strmPath = "/home/jack/strm/movies/best movie 2000.strm"
 # driveID = "0AGHbAfUtSfVATg4F5B"
 
@@ -90,7 +90,7 @@ elif not strmInfo.get("hdr") and re.search("hdr10", filename, re.IGNORECASE):
 
 cmd = "rclone lsf --format i"
 args = shlex.split(cmd)
-args.append(encryptedFilePath)
+args.append(remoteVideoPath)
 fileID = subprocess.check_output(args).strip().decode("utf-8")
 strmInfo["file_id"] = fileID
 
