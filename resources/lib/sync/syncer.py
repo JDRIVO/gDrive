@@ -74,7 +74,7 @@ class Syncer:
 			syncedIDs.append(id)
 
 			try:
-				# Shared items that google automatically adds to an account don't have parentFolderIDs
+				# shared items that google automatically adds to an account don't have parentFolderIDs
 				parentFolderID = item["parents"][0]
 			except:
 				continue
@@ -356,7 +356,7 @@ class Syncer:
 		folders = []
 
 		if initialSync and self.settings.getSetting("sync_progress_dialog"):
-			pDialog = dialogs.SyncProgressionDialog(self.fileTree, heading=f"Syncing files from {folderSettings['remote_name']}")
+			pDialog = dialogs.SyncProgressionDialog(self.fileTree, heading=f"{self.settings.getLocalizedString(30052)} {folderSettings['remote_name']}")
 		else:
 			pDialog = False
 
@@ -387,7 +387,7 @@ class Syncer:
 			return
 
 		if pDialog:
-			pDialog = dialogs.SyncProgressionDialog(self.fileTree, heading=f"Performing renaming operations on {folderSettings['remote_name']}")
+			pDialog = dialogs.SyncProgressionDialog(self.fileTree, heading=f"{self.settings.getLocalizedString(30053)} {folderSettings['remote_name']}")
 
 		with threadpool.ThreadPool(threadCount) as pool:
 

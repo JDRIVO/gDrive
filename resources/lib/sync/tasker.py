@@ -127,7 +127,6 @@ class Tasker:
 			if time.time() - lastUpdate < taskFrequency and not startUpRun:
 
 				if self.monitor.waitForAbort(1):
-					# self.saveSyncSettings()
 					break
 
 				continue
@@ -153,7 +152,6 @@ class Tasker:
 			if currentTime != taskFrequency and not startUpRun:
 
 				if self.monitor.waitForAbort(1):
-					# self.saveSyncSettings()
 					break
 
 				continue

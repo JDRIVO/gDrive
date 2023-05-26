@@ -205,6 +205,14 @@ msgctxt "#30051"
 msgid "Sync on startup"
 msgstr "Sync on startup"
 
+msgctxt "#30052"
+msgid "Syncing files from"
+msgstr "Syncing files from"
+
+msgctxt "#30053"
+msgid "Performing renaming operations on"
+msgstr "Performing renaming operations on"
+
 msgctxt "#30058"
 msgid "Search language"
 msgstr "Search language"
