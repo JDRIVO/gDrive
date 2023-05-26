@@ -49,6 +49,7 @@ class SyncSettings(xbmcgui.WindowDialog):
 		self.dialog = xbmcgui.Dialog()
 
 		texturesPath = os.path.join(addon.getAddonInfo("path"), "resources", "media")
+		self.gDriveIconPath = os.path.join(texturesPath, "icon.png")
 		self.radioButtonFocus = os.path.join(texturesPath, "radiobutton-focus.png")
 		self.radioButtonNoFocus = os.path.join(texturesPath, "radiobutton-nofocus.png")
 		self.buttonFocusTexture = os.path.join(texturesPath, "focus.png")
@@ -501,7 +502,7 @@ class SyncSettings(xbmcgui.WindowDialog):
 
 		self.close()
 		xbmc.executebuiltin("ActivateWindow(busydialognocancel)")
-		self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30075))
+		self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30075), self.gDriveIconPath)
 		data = f"folder_id={self.folderID}&delete=True"
 		url = f"http://localhost:{constants.settings.getSettingInt('server_port', 8011)}/stop_folder_sync"
 		req = urllib.request.Request(url, data.encode("utf-8"))
@@ -518,7 +519,7 @@ class SyncSettings(xbmcgui.WindowDialog):
 
 		self.close()
 		xbmc.executebuiltin("ActivateWindow(busydialognocancel)")
-		self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30075))
+		self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30075), self.gDriveIconPath)
 		data = f"drive_id={self.driveID}&delete=True"
 		url = f"http://localhost:{constants.settings.getSettingInt('server_port', 8011)}/stop_all_folders_sync"
 		req = urllib.request.Request(url, data.encode("utf-8"))
@@ -580,7 +581,7 @@ class SyncSettings(xbmcgui.WindowDialog):
 
 		if self.displayMode == "new":
 			xbmc.executebuiltin("ActivateWindow(busydialognocancel)")
-			self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30082))
+			self.dialog.notification(constants.settings.getLocalizedString(30000), constants.settings.getLocalizedString(30082), self.gDriveIconPath)
 			self.folderName = self.folderName_ = filesystem.helpers.removeProhibitedFSchars(self.folderName)
 			remoteName = self.folderName
 			copy = 1

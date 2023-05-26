@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import xbmc
 import xbmcgui
+import xbmcaddon
 
 import constants
 from .. import sync
@@ -51,6 +52,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 		self.taskManager = sync.tasker.Tasker(self.settings, self.accountManager)
 		self.taskManager.run()
 		self.fileOperations = filesystem.operations.FileOperations()
+		self.gDriveIconPath = os.path.join(xbmcaddon.Addon().getAddonInfo("path"), "resources", "media", "icon.png")
 
 class ServerHandler(BaseHTTPRequestHandler):
 
@@ -171,7 +173,11 @@ class ServerHandler(BaseHTTPRequestHandler):
 			self.server.cache.removeFolder(folderID, deleteFiles=delete)
 
 			if delete:
-				xbmcgui.Dialog().notification(self.server.settings.getLocalizedString(30000), self.server.settings.getLocalizedString(30045))
+				xbmcgui.Dialog().notification(
+					self.server.settings.getLocalizedString(30000), 
+					self.server.settings.getLocalizedString(30045),
+					self.server.gDriveIconPath,
+				)
 
 		elif self.path == "/stop_all_folders_sync":
 			contentLength = int(self.headers["Content-Length"])
@@ -183,7 +189,11 @@ class ServerHandler(BaseHTTPRequestHandler):
 			self.server.cache.removeAllFolders(driveID, deleteFiles=delete)
 
 			if delete:
-				xbmcgui.Dialog().notification(self.server.settings.getLocalizedString(30000), self.server.settings.getLocalizedString(30045))
+				xbmcgui.Dialog().notification(
+					self.server.settings.getLocalizedString(30000),
+					self.server.settings.getLocalizedString(30045),
+					self.server.gDriveIconPath,
+				)
 
 		elif self.path == "/renew_task":
 			contentLength = int(self.headers["Content-Length"])
@@ -247,6 +257,7 @@ class ServerHandler(BaseHTTPRequestHandler):
 						xbmcgui.Dialog().notification(
 							f"{self.server.settings.getLocalizedString(30003)}: {self.server.settings.getLocalizedString(30006)}",
 							self.server.settings.getLocalizedString(30007),
+							self.server.gDriveIconPath,
 						)
 						break
 
