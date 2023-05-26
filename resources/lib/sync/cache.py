@@ -204,7 +204,7 @@ class Cache(Database):
 		directories = self.getDirectories(folderID, column)
 
 		if deleteFiles and pDialog:
-			pDialog = dialogs.FileDeletionDialog(0, heading="Deleting files")
+			pDialog = dialogs.FileDeletionDialog(0, heading=settings.getLocalizedString(30075))
 
 		while directories:
 			directory = directories.pop()
