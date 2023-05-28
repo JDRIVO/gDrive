@@ -164,7 +164,7 @@ class Syncer:
 			dirPath, rootFolderID = self.cloudService.getDirectory(self.cache, folderID)
 
 			if dirPath:
-				syncedIDs.append(parentFolderID)
+				# syncedIDs.append(parentFolderID)
 				self.cache.updateDirectory({"parent_folder_id": parentFolderID}, folderID)
 				cachedDirectory = self.cache.getDirectory(parentFolderID)
 				dirPath_ = dirPath
