@@ -166,16 +166,19 @@ class Syncer:
 			if dirPath:
 				# syncedIDs.append(parentFolderID)
 				self.cache.updateDirectory({"parent_folder_id": parentFolderID}, folderID)
-				cachedDirectory = self.cache.getDirectory(parentFolderID)
+				cachedParentDirectory = self.cache.getDirectory(parentFolderID)
 				dirPath_ = dirPath
 				copy = 1
 
-				if not cachedDirectory:
+				if not cachedParentDirectory:
 					parentsParentFolderID = self.cloudService.getParentDirectoryID(parentFolderID)
+					parentDirPath = os.path.split(dirPath)[0]
+
 					directory = {
 						"drive_id": driveID,
 						"folder_id": parentFolderID,
-						"local_path": os.path.split(dirPath)[0],
+						"local_path": parentDirPath,
+						"remote_name": os.path.basename(parentDirPath),
 						"parent_folder_id": parentsParentFolderID if parentsParentFolderID != driveID else parentsParentFolderID,
 						"root_folder_id": rootFolderID,
 					}
