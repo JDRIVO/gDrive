@@ -14,7 +14,7 @@ class FileTree:
 		self.cache = cache
 		self.counterLock = threading.Lock()
 
-	def buildTree(self, folderID, parentFolderID, path, excludedTypes, encrypter, syncedIDs, threadCount):
+	def buildTree(self, folderID, parentFolderID, path, excludedTypes, encrypter, syncedIDs, excludedIDs, threadCount):
 		self.fileCount = 0
 		fileTree = dict()
 		remoteName = os.path.basename(path)
@@ -26,9 +26,9 @@ class FileTree:
 			copy += 1
 
 		fileTree[folderID] = Folder(folderID, parentFolderID, remoteName, path)
-		yield from self.getContents(fileTree, [folderID], excludedTypes, encrypter, syncedIDs, threadCount)
+		yield from self.getContents(fileTree, [folderID], excludedTypes, encrypter, syncedIDs, excludedIDs, threadCount)
 
-	def getContents(self, fileTree, folderIDs, excludedTypes, encrypter, syncedIDs, threadCount):
+	def getContents(self, fileTree, folderIDs, excludedTypes, encrypter, syncedIDs, excludedIDs, threadCount):
 		maxIDs = 299
 		queries = []
 
@@ -46,21 +46,25 @@ class FileTree:
 
 			for query, parentFolderIDs in queries:
 				items = self.cloudService.listDirectory(customQuery=query)
-				yield from self.filterContents(fileTree, items, parentFolderIDs, folderIDs, excludedTypes, encrypter, syncedIDs)
+				yield from self.filterContents(fileTree, items, parentFolderIDs, folderIDs, excludedTypes, encrypter, syncedIDs, excludedIDs)
 
 		if folderIDs:
-			yield from self.getContents(fileTree, folderIDs, excludedTypes, encrypter, syncedIDs, threadCount)
+			yield from self.getContents(fileTree, folderIDs, excludedTypes, encrypter, syncedIDs, excludedIDs, threadCount)
 
-	def filterContents(self, fileTree, items, parentFolderIDs, folderIDs, excludedTypes, encrypter, syncedIDs):
+	def filterContents(self, fileTree, items, parentFolderIDs, folderIDs, excludedTypes, encrypter, syncedIDs, excludedIDs):
 		paths = []
 
 		for item in items:
 			id = item["id"]
-			parentFolderID = item["parents"][0]
-			mimeType = item["mimeType"]
+
+			if id in excludedIDs:
+				continue
 
 			if syncedIDs is not None:
 				syncedIDs.append(id)
+
+			parentFolderID = item["parents"][0]
+			mimeType = item["mimeType"]
 
 			if mimeType == "application/vnd.google-apps.folder":
 				folderName = item["name"]
