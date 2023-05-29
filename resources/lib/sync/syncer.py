@@ -230,21 +230,19 @@ class Syncer:
 		if not cachedDirectory:
 			dirPath, rootFolderID = self.cloudService.getDirectory(self.cache, parentFolderID)
 
-			if not rootFolderID:
+			if not rootFolderID and cachedFile:
+				# file has moved outside of root folder hierarchy/tree
+				cachedParentFolderID = cachedFile["parent_folder_id"]
+				cachedDirectory = self.cache.getDirectory(cachedParentFolderID)
 
-				if cachedFile:
-					# file has moved outside of root folder hierarchy/tree
-					cachedParentFolderID = cachedFile["parent_folder_id"]
-					cachedDirectory = self.cache.getDirectory(cachedParentFolderID)
+				if cachedFile["original_folder"]:
+					cachedFilePath = os.path.join(syncRootPath, drivePath, cachedDirectory["local_path"], cachedFile["local_name"])
+				else:
+					cachedFilePath = os.path.join(syncRootPath, cachedFile["local_path"])
 
-					if cachedFile["original_folder"]:
-						cachedFilePath = os.path.join(syncRootPath, drivePath, cachedDirectory["local_path"], cachedFile["local_name"])
-					else:
-						cachedFilePath = os.path.join(syncRootPath, cachedFile["local_path"])
-
-					self.fileOperations.deleteFile(syncRootPath, filePath=cachedFilePath)
-					self.cache.deleteFile(fileID)
-					self.deleted = True
+				self.fileOperations.deleteFile(syncRootPath, filePath=cachedFilePath)
+				self.cache.deleteFile(fileID)
+				self.deleted = True
 
 			return
 
